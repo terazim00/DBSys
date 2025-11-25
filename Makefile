@@ -8,6 +8,7 @@ SRC_DIR = src
 INC_DIR = include
 BUILD_DIR = build
 BIN_DIR = .
+EXAMPLE_DIR = examples
 
 # Source files
 SOURCES = $(wildcard $(SRC_DIR)/*.cpp)
@@ -15,6 +16,14 @@ OBJECTS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
 
 # Target executable
 TARGET = $(BIN_DIR)/dbsys
+
+# Example executables
+EXAMPLE_SIMPLE = $(BIN_DIR)/simple_usage
+EXAMPLE_FULL = $(BIN_DIR)/file_manager_example
+
+# Library objects (without main.cpp)
+LIB_SOURCES = $(filter-out $(SRC_DIR)/main.cpp, $(SOURCES))
+LIB_OBJECTS = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(LIB_SOURCES))
 
 # Default target
 all: $(TARGET)
@@ -70,14 +79,31 @@ test: $(TARGET)
 		--outer-type PART --inner-type PARTSUPP --output output/result_buf50.dat \
 		--buffer-size 50
 
+# Build example programs
+examples: $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL)
+
+$(EXAMPLE_SIMPLE): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp
+	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp -o $(EXAMPLE_SIMPLE)
+	@echo "Built: $(EXAMPLE_SIMPLE)"
+
+$(EXAMPLE_FULL): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/file_manager_example.cpp
+	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/file_manager_example.cpp -o $(EXAMPLE_FULL)
+	@echo "Built: $(EXAMPLE_FULL)"
+
+# Clean examples
+clean-examples:
+	rm -f $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL)
+	@echo "Example executables cleaned"
+
 # Help
 help:
 	@echo "Available targets:"
 	@echo "  all       - Build the project (default)"
 	@echo "  debug     - Build with debug symbols"
+	@echo "  examples  - Build example programs"
 	@echo "  clean     - Remove build artifacts"
 	@echo "  distclean - Remove all generated files"
 	@echo "  test      - Run performance tests with different buffer sizes"
 	@echo "  help      - Show this help message"
 
-.PHONY: all debug clean distclean test help
+.PHONY: all debug clean distclean test help examples clean-examples
