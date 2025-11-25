@@ -20,6 +20,7 @@ TARGET = $(BIN_DIR)/dbsys
 # Example executables
 EXAMPLE_SIMPLE = $(BIN_DIR)/simple_usage
 EXAMPLE_FULL = $(BIN_DIR)/file_manager_example
+EXAMPLE_JOIN = $(BIN_DIR)/join_demo
 
 # Library objects (without main.cpp)
 LIB_SOURCES = $(filter-out $(SRC_DIR)/main.cpp, $(SOURCES))
@@ -80,7 +81,7 @@ test: $(TARGET)
 		--buffer-size 50
 
 # Build example programs
-examples: $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL)
+examples: $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN)
 
 $(EXAMPLE_SIMPLE): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp
 	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp -o $(EXAMPLE_SIMPLE)
@@ -90,9 +91,13 @@ $(EXAMPLE_FULL): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/file_manager_example
 	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/file_manager_example.cpp -o $(EXAMPLE_FULL)
 	@echo "Built: $(EXAMPLE_FULL)"
 
+$(EXAMPLE_JOIN): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/join_demo.cpp
+	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/join_demo.cpp -o $(EXAMPLE_JOIN)
+	@echo "Built: $(EXAMPLE_JOIN)"
+
 # Clean examples
 clean-examples:
-	rm -f $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL)
+	rm -f $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN)
 	@echo "Example executables cleaned"
 
 # Help
