@@ -21,6 +21,7 @@ TARGET = $(BIN_DIR)/dbsys
 EXAMPLE_SIMPLE = $(BIN_DIR)/simple_usage
 EXAMPLE_FULL = $(BIN_DIR)/file_manager_example
 EXAMPLE_JOIN = $(BIN_DIR)/join_demo
+EXAMPLE_PERF = $(BIN_DIR)/performance_test
 
 # Library objects (without main.cpp)
 LIB_SOURCES = $(filter-out $(SRC_DIR)/main.cpp, $(SOURCES))
@@ -81,7 +82,7 @@ test: $(TARGET)
 		--buffer-size 50
 
 # Build example programs
-examples: $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN)
+examples: $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN) $(EXAMPLE_PERF)
 
 $(EXAMPLE_SIMPLE): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp
 	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/simple_usage.cpp -o $(EXAMPLE_SIMPLE)
@@ -95,9 +96,13 @@ $(EXAMPLE_JOIN): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/join_demo.cpp
 	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/join_demo.cpp -o $(EXAMPLE_JOIN)
 	@echo "Built: $(EXAMPLE_JOIN)"
 
+$(EXAMPLE_PERF): $(BUILD_DIR) $(LIB_OBJECTS) $(EXAMPLE_DIR)/performance_test.cpp
+	$(CXX) $(CXXFLAGS) $(LIB_OBJECTS) $(EXAMPLE_DIR)/performance_test.cpp -o $(EXAMPLE_PERF)
+	@echo "Built: $(EXAMPLE_PERF)"
+
 # Clean examples
 clean-examples:
-	rm -f $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN)
+	rm -f $(EXAMPLE_SIMPLE) $(EXAMPLE_FULL) $(EXAMPLE_JOIN) $(EXAMPLE_PERF)
 	@echo "Example executables cleaned"
 
 # Help
