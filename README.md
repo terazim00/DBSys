@@ -75,48 +75,15 @@ DBSys/
 ## 빌드 방법
 
 ### 요구사항
-- C++11 이상 지원 컴파일러 (g++, clang++)
+- C++11 이상 지원 컴파일러 (g++)
 - Make
+- Ubuntu/Linux 환경
 
-### Linux/Ubuntu에서 컴파일
+### 컴파일
 ```bash
 make                # 최적화 빌드
 make debug          # 디버그 빌드
 make clean          # 빌드 파일 삭제
-```
-
-### Windows에서 컴파일
-
-**방법 1: MinGW/MSYS2 사용 (권장)**
-```bash
-# MSYS2 설치 후 (https://www.msys2.org/)
-pacman -S mingw-w64-x86_64-gcc make
-
-# 프로젝트 디렉토리에서
-make
-```
-
-**방법 2: Visual Studio 사용**
-```bash
-# Developer Command Prompt에서
-cl /EHsc /std:c++11 /I include src/*.cpp /Fe:dbsys.exe
-```
-
-**방법 3: WSL (Windows Subsystem for Linux) 사용**
-```bash
-# WSL Ubuntu에서 Linux와 동일하게 빌드
-make
-```
-
-### macOS에서 컴파일
-```bash
-# Xcode Command Line Tools 설치
-xcode-select --install
-
-# 프로젝트 디렉토리에서
-make
-# 또는
-make CXX=clang++
 ```
 
 ## 사용 방법
@@ -154,14 +121,39 @@ TPC-H 데이터를 사용하기 전에 CSV(또는 .tbl) 파일을 블록 기반 
   --block-size 4096
 ```
 
-### 3. 다양한 버퍼 크기로 성능 테스트
+### 3. Join 실행 및 성능 측정
+
+**기본 Join 실행:**
+```bash
+./dbsys --join \
+  --outer-table data/part.dat \
+  --inner-table data/partsupp.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat \
+  --buffer-size 10
+```
+
+**샘플 데이터로 빠른 테스트:**
+```bash
+./dbsys --join \
+  --outer-table data/part_sample.dat \
+  --inner-table data/partsupp_sample.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat
+```
+
+## 성능 측정 명령어
+
+### 다양한 버퍼 크기 테스트
+
+버퍼 크기가 성능에 미치는 영향을 측정:
 
 ```bash
-# 자동 성능 테스트 실행
-make test
-
-# 또는 수동으로 다양한 버퍼 크기 테스트
+# 버퍼 크기별 테스트 (5, 10, 20, 50, 100 블록)
 for bufsize in 5 10 20 50 100; do
+  echo "=== Testing with buffer size: $bufsize ==="
   ./dbsys --join \
     --outer-table data/part.dat \
     --inner-table data/partsupp.dat \
@@ -169,6 +161,93 @@ for bufsize in 5 10 20 50 100; do
     --inner-type PARTSUPP \
     --output output/result_buf${bufsize}.dat \
     --buffer-size ${bufsize}
+  echo ""
+done
+```
+
+### 블록 크기별 테스트
+
+블록 크기가 성능에 미치는 영향을 측정:
+
+```bash
+# 블록 크기별 테스트 (2KB, 4KB, 8KB, 16KB)
+for blocksize in 2048 4096 8192 16384; do
+  echo "=== Testing with block size: $blocksize ==="
+
+  # 먼저 해당 블록 크기로 데이터 재변환
+  ./dbsys --convert-csv \
+    --csv-file data/part.tbl \
+    --block-file data/part_${blocksize}.dat \
+    --table-type PART \
+    --block-size ${blocksize}
+
+  ./dbsys --convert-csv \
+    --csv-file data/partsupp.tbl \
+    --block-file data/partsupp_${blocksize}.dat \
+    --table-type PARTSUPP \
+    --block-size ${blocksize}
+
+  # Join 실행
+  ./dbsys --join \
+    --outer-table data/part_${blocksize}.dat \
+    --inner-table data/partsupp_${blocksize}.dat \
+    --outer-type PART \
+    --inner-type PARTSUPP \
+    --output output/result_block${blocksize}.dat \
+    --buffer-size 10 \
+    --block-size ${blocksize}
+  echo ""
+done
+```
+
+### 성능 결과 저장 및 분석
+
+```bash
+# 결과를 파일로 저장
+./dbsys --join \
+  --outer-table data/part.dat \
+  --inner-table data/partsupp.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat \
+  --buffer-size 10 | tee performance_result.txt
+
+# 여러 설정 테스트 후 결과 비교
+echo "Buffer Size,Block Reads,Block Writes,Output Records,Time (s)" > benchmark.csv
+for bufsize in 5 10 20 50 100; do
+  ./dbsys --join \
+    --outer-table data/part.dat \
+    --inner-table data/partsupp.dat \
+    --outer-type PART \
+    --inner-type PARTSUPP \
+    --output output/result_buf${bufsize}.dat \
+    --buffer-size ${bufsize} | grep -E "Block Reads|Block Writes|Output Records|Elapsed Time" | \
+    awk -v bs=$bufsize 'BEGIN{ORS=","} {print $NF} END{print ""}' >> benchmark.csv
+done
+```
+
+### 실행 시간 측정
+
+```bash
+# time 명령어로 전체 실행 시간 측정
+time ./dbsys --join \
+  --outer-table data/part.dat \
+  --inner-table data/partsupp.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat \
+  --buffer-size 10
+
+# 반복 실행하여 평균 측정
+for i in {1..5}; do
+  echo "Run $i:"
+  /usr/bin/time -v ./dbsys --join \
+    --outer-table data/part.dat \
+    --inner-table data/partsupp.dat \
+    --outer-type PART \
+    --inner-type PARTSUPP \
+    --output output/result_run${i}.dat \
+    --buffer-size 10 2>&1 | grep "Elapsed"
 done
 ```
 
@@ -272,83 +351,72 @@ Memory Usage: 40960 bytes (0.039 MB)
 
 ## TPC-H 테스트 데이터 준비
 
-### Linux/macOS에서 TPC-H 데이터 생성
+### 방법 1: TPC-H 데이터 생성
 
 ```bash
-# TPC-H 도구 다운로드 및 컴파일
+# TPC-H dbgen 도구 다운로드 및 컴파일
 git clone https://github.com/electrum/tpch-dbgen.git
 cd tpch-dbgen
 make
 
-# Scale Factor 0.1 (약 100MB 데이터) 생성
-./dbgen -s 0.1
+# 데이터 생성 (Scale Factor에 따라 크기 조절)
+./dbgen -s 0.1          # 0.1 = 약 100MB
+./dbgen -s 1            # 1 = 약 1GB
 
-# 생성된 .tbl 파일을 data/ 디렉토리로 복사
+# 생성된 .tbl 파일을 DBSys data/ 디렉토리로 복사
 cp part.tbl partsupp.tbl ../DBSys/data/
+cd ../DBSys
 ```
 
-**다양한 데이터 크기:**
+**Scale Factor 옵션:**
 - `-s 0.01`: 매우 작은 테스트 데이터 (~10MB)
 - `-s 0.1`: 소규모 테스트 데이터 (~100MB)
 - `-s 1`: 표준 크기 (1GB)
 - `-s 10`: 대규모 벤치마크 (10GB)
 
-### Windows에서 TPC-H 데이터 생성
+### 방법 2: 기존 TPC-H 파일 사용
 
-**방법 1: WSL 사용 (권장)**
+이미 TPC-H .tbl 파일을 가지고 있다면 data/ 디렉토리에 복사:
+
 ```bash
-# WSL Ubuntu에서 위의 Linux 방법과 동일
+cp /path/to/part.tbl data/
+cp /path/to/partsupp.tbl data/
 ```
 
-**방법 2: MinGW/MSYS2 사용**
+### 방법 3: 샘플 데이터로 빠른 테스트
+
+포함된 샘플 데이터를 사용하여 바로 테스트 가능:
 ```bash
-# MSYS2 터미널에서
-git clone https://github.com/electrum/tpch-dbgen.git
-cd tpch-dbgen
+# data/part_sample.dat, data/partsupp_sample.dat 파일이 이미 포함되어 있습니다
+# 아래 "실행 예제" 섹션 참고
+```
+
+## 빠른 시작 가이드
+
+전체 과정을 한눈에:
+
+```bash
+# 1. 빌드
 make
-./dbgen.exe -s 0.1
-copy part.tbl ..\DBSys\data\
-copy partsupp.tbl ..\DBSys\data\
-```
 
-**방법 3: 사전 생성된 데이터 사용**
-- 다른 환경에서 생성한 .tbl 파일을 복사
-- .tbl 파일은 텍스트 파일이므로 플랫폼 간 호환 가능
-
-### 기존 TPC-H 파일이 있는 경우
-
-이미 TPC-H .tbl 파일을 가지고 있다면:
-
-```bash
-# 1. .tbl 파일을 data/ 디렉토리에 복사
+# 2. TPC-H 데이터가 있다면 data/ 디렉토리에 복사
 cp /path/to/part.tbl data/
 cp /path/to/partsupp.tbl data/
 
-# 2. 블록 형식으로 변환
-./dbsys --convert-csv \
-  --csv-file data/part.tbl \
-  --block-file data/part.dat \
-  --table-type PART
+# 3. CSV → Block 변환
+./dbsys --convert-csv --csv-file data/part.tbl --block-file data/part.dat --table-type PART
+./dbsys --convert-csv --csv-file data/partsupp.tbl --block-file data/partsupp.dat --table-type PARTSUPP
 
-./dbsys --convert-csv \
-  --csv-file data/partsupp.tbl \
-  --block-file data/partsupp.dat \
-  --table-type PARTSUPP
-
-# 3. 이제 Join 실행 가능
+# 4. Join 실행
 ./dbsys --join \
   --outer-table data/part.dat \
   --inner-table data/partsupp.dat \
   --outer-type PART \
   --inner-type PARTSUPP \
-  --output output/result.dat
-```
+  --output output/result.dat \
+  --buffer-size 10
 
-### 샘플 데이터로 빠른 테스트
-
-작은 샘플 데이터로 먼저 테스트하려면:
-```bash
-# data/ 디렉토리에 샘플 .dat 파일이 포함되어 있습니다
+# 5. 샘플 데이터로 빠른 테스트 (데이터 변환 없이 바로 실행)
 ./dbsys --join \
   --outer-table data/part_sample.dat \
   --inner-table data/partsupp_sample.dat \
@@ -356,43 +424,6 @@ cp /path/to/partsupp.tbl data/
   --inner-type PARTSUPP \
   --output output/result.dat
 ```
-
-## 최적화 기법
-
-현재 구현된 최적화:
-- ✅ 멀티 블록 버퍼링
-- ✅ 효율적인 메모리 관리 (이동 시맨틱)
-- ✅ 블록 단위 I/O
-
-추가 최적화 가능 항목:
-- 🔄 해시 조인으로 확장
-- 🔄 병렬 처리 (멀티스레딩)
-- 🔄 인덱스 기반 조인
-- 🔄 SIMD 최적화
-
-## 보고서 작성 가이드
-
-### 포함해야 할 내용
-
-1. **구현 세부사항**
-   - 블록 및 레코드 관리 방식
-   - Join 알고리즘 구현
-   - 버퍼 관리 전략
-
-2. **성능 분석**
-   - 다양한 버퍼 크기에 따른 성능 비교
-   - 수행 시간, I/O 횟수, 메모리 사용량 측정
-   - 그래프 및 표로 시각화
-
-3. **성능 측정 예시**
-   ```bash
-   # 성능 테스트 실행 및 결과 저장
-   ./scripts/benchmark.sh > performance_results.txt
-   ```
-
-4. **최적화 전략**
-   - 적용한 최적화 기법 설명
-   - 성능 개선 효과 분석
 
 ## 트러블슈팅
 
@@ -402,16 +433,19 @@ cp /path/to/partsupp.tbl data/
 g++ --version
 
 # 명시적으로 C++11 표준 지정
-make CXXFLAGS="-std=c++11 -Iinclude"
+make clean && make CXXFLAGS="-std=c++11 -Iinclude"
+```
+
+### output 디렉토리가 없다는 에러
+```bash
+mkdir -p output
 ```
 
 ### 메모리 부족 에러
-- 버퍼 크기를 줄이세요: `--buffer-size 5`
-- 블록 크기를 줄이세요: `--block-size 2048`
-
-### 잘못된 데이터 형식
-- CSV 파일이 파이프(|) 구분자를 사용하는지 확인
-- 파일 인코딩이 UTF-8인지 확인
+```bash
+# 버퍼 크기를 줄이기
+./dbsys --join ... --buffer-size 5
+```
 
 ## 라이선스
 
