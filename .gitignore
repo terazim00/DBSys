@@ -35,3 +35,9 @@ benchmark_results.txt
 *.dll
 *.so
 *.dylib
+
+# Example executables
+simple_usage
+file_manager_example
+join_demo
+performance_test
