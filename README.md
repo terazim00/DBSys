@@ -78,11 +78,45 @@ DBSys/
 - C++11 이상 지원 컴파일러 (g++, clang++)
 - Make
 
-### 컴파일
+### Linux/Ubuntu에서 컴파일
 ```bash
 make                # 최적화 빌드
 make debug          # 디버그 빌드
 make clean          # 빌드 파일 삭제
+```
+
+### Windows에서 컴파일
+
+**방법 1: MinGW/MSYS2 사용 (권장)**
+```bash
+# MSYS2 설치 후 (https://www.msys2.org/)
+pacman -S mingw-w64-x86_64-gcc make
+
+# 프로젝트 디렉토리에서
+make
+```
+
+**방법 2: Visual Studio 사용**
+```bash
+# Developer Command Prompt에서
+cl /EHsc /std:c++11 /I include src/*.cpp /Fe:dbsys.exe
+```
+
+**방법 3: WSL (Windows Subsystem for Linux) 사용**
+```bash
+# WSL Ubuntu에서 Linux와 동일하게 빌드
+make
+```
+
+### macOS에서 컴파일
+```bash
+# Xcode Command Line Tools 설치
+xcode-select --install
+
+# 프로젝트 디렉토리에서
+make
+# 또는
+make CXX=clang++
 ```
 
 ## 사용 방법
@@ -236,9 +270,9 @@ Memory Usage: 40960 bytes (0.039 MB)
 3. **테이블 크기**:
    - 작은 테이블을 Outer로 선택하면 성능 향상
 
-## 테스트 데이터 생성
+## TPC-H 테스트 데이터 준비
 
-TPC-H 벤치마크 도구를 사용하여 테스트 데이터를 생성할 수 있습니다:
+### Linux/macOS에서 TPC-H 데이터 생성
 
 ```bash
 # TPC-H 도구 다운로드 및 컴파일
@@ -253,11 +287,74 @@ make
 cp part.tbl partsupp.tbl ../DBSys/data/
 ```
 
-또는 샘플 데이터 생성 스크립트를 사용:
+**다양한 데이터 크기:**
+- `-s 0.01`: 매우 작은 테스트 데이터 (~10MB)
+- `-s 0.1`: 소규모 테스트 데이터 (~100MB)
+- `-s 1`: 표준 크기 (1GB)
+- `-s 10`: 대규모 벤치마크 (10GB)
+
+### Windows에서 TPC-H 데이터 생성
+
+**방법 1: WSL 사용 (권장)**
+```bash
+# WSL Ubuntu에서 위의 Linux 방법과 동일
+```
+
+**방법 2: MinGW/MSYS2 사용**
+```bash
+# MSYS2 터미널에서
+git clone https://github.com/electrum/tpch-dbgen.git
+cd tpch-dbgen
+make
+./dbgen.exe -s 0.1
+copy part.tbl ..\DBSys\data\
+copy partsupp.tbl ..\DBSys\data\
+```
+
+**방법 3: 사전 생성된 데이터 사용**
+- 다른 환경에서 생성한 .tbl 파일을 복사
+- .tbl 파일은 텍스트 파일이므로 플랫폼 간 호환 가능
+
+### 기존 TPC-H 파일이 있는 경우
+
+이미 TPC-H .tbl 파일을 가지고 있다면:
 
 ```bash
-# 소규모 샘플 데이터 생성 (테스트용)
-./scripts/generate_sample_data.sh
+# 1. .tbl 파일을 data/ 디렉토리에 복사
+cp /path/to/part.tbl data/
+cp /path/to/partsupp.tbl data/
+
+# 2. 블록 형식으로 변환
+./dbsys --convert-csv \
+  --csv-file data/part.tbl \
+  --block-file data/part.dat \
+  --table-type PART
+
+./dbsys --convert-csv \
+  --csv-file data/partsupp.tbl \
+  --block-file data/partsupp.dat \
+  --table-type PARTSUPP
+
+# 3. 이제 Join 실행 가능
+./dbsys --join \
+  --outer-table data/part.dat \
+  --inner-table data/partsupp.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat
+```
+
+### 샘플 데이터로 빠른 테스트
+
+작은 샘플 데이터로 먼저 테스트하려면:
+```bash
+# data/ 디렉토리에 샘플 .dat 파일이 포함되어 있습니다
+./dbsys --join \
+  --outer-table data/part_sample.dat \
+  --inner-table data/partsupp_sample.dat \
+  --outer-type PART \
+  --inner-type PARTSUPP \
+  --output output/result.dat
 ```
 
 ## 최적화 기법
