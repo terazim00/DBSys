@@ -57,7 +57,24 @@ size_t Record::getSerializedSize() const {
 }
 
 bool RecordReader::hasNext() const {
-    return current_offset < block->getUsedSize();
+    // Need at least 4 bytes for record size
+    if (current_offset + sizeof(uint32_t) > block->getUsedSize()) {
+        return false;
+    }
+
+    // Check if we can read the full record
+    const char* data = block->getData();
+    uint32_t record_size;
+    std::memcpy(&record_size, data + current_offset, sizeof(uint32_t));
+
+    // Sanity check: record size should be reasonable (less than block size)
+    if (record_size == 0 || record_size > block->getSize()) {
+        return false;
+    }
+
+    // Check if we have enough bytes for the complete record
+    size_t total_needed = current_offset + sizeof(uint32_t) + record_size;
+    return total_needed <= block->getUsedSize();
 }
 
 Record RecordReader::readNext() {

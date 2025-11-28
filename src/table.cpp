@@ -2,6 +2,41 @@
 #include <sstream>
 #include <iostream>
 #include <algorithm>
+#include <cctype>
+
+// Helper function to trim whitespace from strings
+static std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\n\r\f\v");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\n\r\f\v");
+    return str.substr(first, (last - first + 1));
+}
+
+// Helper function to safely convert string to int
+static int safe_stoi(const std::string& str, const std::string& field_name) {
+    std::string trimmed = trim(str);
+    if (trimmed.empty()) {
+        throw std::runtime_error("Empty field for " + field_name);
+    }
+    try {
+        return std::stoi(trimmed);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Invalid integer in " + field_name + ": '" + trimmed + "'");
+    }
+}
+
+// Helper function to safely convert string to float
+static float safe_stof(const std::string& str, const std::string& field_name) {
+    std::string trimmed = trim(str);
+    if (trimmed.empty()) {
+        throw std::runtime_error("Empty field for " + field_name);
+    }
+    try {
+        return std::stof(trimmed);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Invalid float in " + field_name + ": '" + trimmed + "'");
+    }
+}
 
 // PartRecord 구현
 Record PartRecord::toRecord() const {
@@ -21,16 +56,16 @@ Record PartRecord::toRecord() const {
 PartRecord PartRecord::fromRecord(const Record& rec) {
     PartRecord part;
     if (rec.getFieldCount() < 9) {
-        throw std::runtime_error("Invalid PART record");
+        throw std::runtime_error("Invalid PART record: expected 9 fields, got " + std::to_string(rec.getFieldCount()));
     }
-    part.partkey = std::stoi(rec.getField(0));
+    part.partkey = safe_stoi(rec.getField(0), "PART.partkey");
     part.name = rec.getField(1);
     part.mfgr = rec.getField(2);
     part.brand = rec.getField(3);
     part.type = rec.getField(4);
-    part.size = std::stoi(rec.getField(5));
+    part.size = safe_stoi(rec.getField(5), "PART.size");
     part.container = rec.getField(6);
-    part.retailprice = std::stof(rec.getField(7));
+    part.retailprice = safe_stof(rec.getField(7), "PART.retailprice");
     part.comment = rec.getField(8);
     return part;
 }
@@ -41,7 +76,7 @@ PartRecord PartRecord::fromCSV(const std::string& line) {
     std::string field;
 
     std::getline(ss, field, '|');
-    part.partkey = std::stoi(field);
+    part.partkey = safe_stoi(field, "PART.partkey (CSV)");
 
     std::getline(ss, part.name, '|');
     std::getline(ss, part.mfgr, '|');
@@ -49,12 +84,12 @@ PartRecord PartRecord::fromCSV(const std::string& line) {
     std::getline(ss, part.type, '|');
 
     std::getline(ss, field, '|');
-    part.size = std::stoi(field);
+    part.size = safe_stoi(field, "PART.size (CSV)");
 
     std::getline(ss, part.container, '|');
 
     std::getline(ss, field, '|');
-    part.retailprice = std::stof(field);
+    part.retailprice = safe_stof(field, "PART.retailprice (CSV)");
 
     std::getline(ss, part.comment, '|');
 
@@ -75,12 +110,12 @@ Record PartSuppRecord::toRecord() const {
 PartSuppRecord PartSuppRecord::fromRecord(const Record& rec) {
     PartSuppRecord partsupp;
     if (rec.getFieldCount() < 5) {
-        throw std::runtime_error("Invalid PARTSUPP record");
+        throw std::runtime_error("Invalid PARTSUPP record: expected 5 fields, got " + std::to_string(rec.getFieldCount()));
     }
-    partsupp.partkey = std::stoi(rec.getField(0));
-    partsupp.suppkey = std::stoi(rec.getField(1));
-    partsupp.availqty = std::stoi(rec.getField(2));
-    partsupp.supplycost = std::stof(rec.getField(3));
+    partsupp.partkey = safe_stoi(rec.getField(0), "PARTSUPP.partkey");
+    partsupp.suppkey = safe_stoi(rec.getField(1), "PARTSUPP.suppkey");
+    partsupp.availqty = safe_stoi(rec.getField(2), "PARTSUPP.availqty");
+    partsupp.supplycost = safe_stof(rec.getField(3), "PARTSUPP.supplycost");
     partsupp.comment = rec.getField(4);
     return partsupp;
 }
@@ -91,16 +126,16 @@ PartSuppRecord PartSuppRecord::fromCSV(const std::string& line) {
     std::string field;
 
     std::getline(ss, field, '|');
-    partsupp.partkey = std::stoi(field);
+    partsupp.partkey = safe_stoi(field, "PARTSUPP.partkey (CSV)");
 
     std::getline(ss, field, '|');
-    partsupp.suppkey = std::stoi(field);
+    partsupp.suppkey = safe_stoi(field, "PARTSUPP.suppkey (CSV)");
 
     std::getline(ss, field, '|');
-    partsupp.availqty = std::stoi(field);
+    partsupp.availqty = safe_stoi(field, "PARTSUPP.availqty (CSV)");
 
     std::getline(ss, field, '|');
-    partsupp.supplycost = std::stof(field);
+    partsupp.supplycost = safe_stof(field, "PARTSUPP.supplycost (CSV)");
 
     std::getline(ss, partsupp.comment, '|');
 
