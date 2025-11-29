@@ -11,6 +11,7 @@ TPC-H PART와 PARTSUPP 테이블에 대한 Block Nested Loops Join 구현
 - ✅ **고정 크기 블록 관리**: 4KB 기본 블록 크기 (조절 가능)
 - ✅ **가변 길이 레코드 지원**: 효율적인 직렬화/역직렬화
 - ✅ **Block Nested Loops Join**: 전통적인 조인 알고리즘 구현
+- ✅ **다중 테이블 조인 (Multi-Table Join)**: 3개 이상의 테이블 조인 지원 (NEW!)
 - ✅ **버퍼 관리**: 설정 가능한 버퍼 크기로 메모리 효율성 조절
 - ✅ **성능 측정**: 수행 시간, I/O 횟수, 메모리 사용량 측정
 - ✅ **TPC-H 호환**: PART와 PARTSUPP 테이블 스키마 지원
@@ -57,13 +58,15 @@ DBSys/
 │   ├── record.h         # 레코드 직렬화/역직렬화
 │   ├── table.h          # 테이블 스키마 및 I/O
 │   ├── buffer.h         # 버퍼 관리
-│   └── join.h           # Join 알고리즘
+│   ├── join.h           # Join 알고리즘 (2-table)
+│   └── multi_table_join.h  # Multi-table Join 알고리즘
 ├── src/                 # 구현 파일
 │   ├── block.cpp
 │   ├── record.cpp
 │   ├── table.cpp
 │   ├── buffer.cpp
 │   ├── join.cpp
+│   ├── multi_table_join.cpp
 │   └── main.cpp
 ├── data/                # 데이터 파일 (.tbl, .dat)
 ├── output/              # 결과 파일
@@ -108,7 +111,7 @@ TPC-H 데이터를 사용하기 전에 CSV(또는 .tbl) 파일을 블록 기반 
   --block-size 4096
 ```
 
-### 2. Block Nested Loops Join 실행
+### 2. Block Nested Loops Join 실행 (2개 테이블)
 
 ```bash
 ./dbsys --join \
@@ -121,7 +124,44 @@ TPC-H 데이터를 사용하기 전에 CSV(또는 .tbl) 파일을 블록 기반 
   --block-size 4096
 ```
 
-### 3. Join 실행 및 성능 측정
+### 3. Multi-Table Join 실행 (3개 이상 테이블)
+
+다중 테이블 조인은 Left-Deep Join Plan을 사용하여 여러 테이블을 순차적으로 조인합니다.
+
+```bash
+# 2개 테이블 조인 (기본 join과 동일한 결과)
+./dbsys --multi-join \
+  --tables data/part.dat,data/partsupp.dat \
+  --table-types PART,PARTSUPP \
+  --join-conditions "0.partkey=1.partkey" \
+  --output output/multi_result.dat \
+  --buffer-size 10
+
+# 3개 테이블 조인
+./dbsys --multi-join \
+  --tables data/part.dat,data/partsupp.dat,data/supplier.dat \
+  --table-types PART,PARTSUPP,SUPPLIER \
+  --join-conditions "0.partkey=1.partkey;1.suppkey=2.suppkey" \
+  --output output/multi_result.dat \
+  --buffer-size 20
+
+# 4개 테이블 조인
+./dbsys --multi-join \
+  --tables data/t1.dat,data/t2.dat,data/t3.dat,data/t4.dat \
+  --table-types TYPE1,TYPE2,TYPE3,TYPE4 \
+  --join-conditions "0.field1=1.field1;1.field2=2.field2;2.field3=3.field3" \
+  --output output/result.dat \
+  --buffer-size 20
+```
+
+**조인 조건 형식:**
+- 테이블은 0부터 시작하는 인덱스로 참조됩니다
+- 형식: `"TABLE_IDX.FIELD=TABLE_IDX.FIELD;..."`
+- 예시: `"0.partkey=1.partkey;1.suppkey=2.suppkey"`
+  - 첫 번째 조인: 테이블 0(PART)과 테이블 1(PARTSUPP)을 partkey로 조인
+  - 두 번째 조인: 결과와 테이블 2(SUPPLIER)를 suppkey로 조인
+
+### 4. Join 실행 및 성능 측정
 
 **기본 Join 실행:**
 ```bash
@@ -260,12 +300,23 @@ done
 - `--table-type TYPE`: 테이블 타입 (PART 또는 PARTSUPP)
 - `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
 
-### Join 실행 옵션
+### Join 실행 옵션 (2개 테이블)
 - `--join`: Join 실행 모드 활성화
 - `--outer-table FILE`: Outer 테이블 파일 (블록 형식)
 - `--inner-table FILE`: Inner 테이블 파일 (블록 형식)
 - `--outer-type TYPE`: Outer 테이블 타입
 - `--inner-type TYPE`: Inner 테이블 타입
+- `--output FILE`: 출력 파일 경로
+- `--buffer-size NUM`: 버퍼 블록 개수 (기본값: 10)
+- `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
+
+### Multi-Table Join 옵션 (3개 이상 테이블)
+- `--multi-join`: Multi-table join 모드 활성화
+- `--tables FILES`: 쉼표로 구분된 테이블 파일들 (예: `t1.dat,t2.dat,t3.dat`)
+- `--table-types TYPES`: 쉼표로 구분된 테이블 타입들 (예: `PART,PARTSUPP,SUPPLIER`)
+- `--join-conditions CONDITIONS`: 조인 조건들 (예: `"0.partkey=1.partkey;1.suppkey=2.suppkey"`)
+  - 형식: `"TABLE_IDX.FIELD=TABLE_IDX.FIELD;..."`
+  - 조건 개수는 (테이블 개수 - 1)개여야 함
 - `--output FILE`: 출력 파일 경로
 - `--buffer-size NUM`: 버퍼 블록 개수 (기본값: 10)
 - `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
