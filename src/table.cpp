@@ -38,6 +38,28 @@ static float safe_stof(const std::string& str, const std::string& field_name) {
     }
 }
 
+// Helper function to extract supplier key from strings like "Supplier#000009978"
+static int extract_supplier_key(const std::string& str, const std::string& field_name) {
+    std::string trimmed = trim(str);
+    if (trimmed.empty()) {
+        throw std::runtime_error("Empty field for " + field_name);
+    }
+
+    // Check if it's in the format "Supplier#NNNNNN"
+    if (trimmed.find("Supplier#") == 0) {
+        // Extract the numeric part after "Supplier#"
+        std::string num_part = trimmed.substr(9); // "Supplier#" is 9 characters
+        try {
+            return std::stoi(num_part);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Invalid supplier key format in " + field_name + ": '" + trimmed + "'");
+        }
+    }
+
+    // Otherwise, try to parse as regular integer
+    return safe_stoi(trimmed, field_name);
+}
+
 // PartRecord 구현
 Record PartRecord::toRecord() const {
     std::vector<std::string> fields;
@@ -129,7 +151,7 @@ PartSuppRecord PartSuppRecord::fromCSV(const std::string& line) {
     partsupp.partkey = safe_stoi(field, "PARTSUPP.partkey (CSV)");
 
     std::getline(ss, field, '|');
-    partsupp.suppkey = safe_stoi(field, "PARTSUPP.suppkey (CSV)");
+    partsupp.suppkey = extract_supplier_key(field, "PARTSUPP.suppkey (CSV)");
 
     std::getline(ss, field, '|');
     partsupp.availqty = safe_stoi(field, "PARTSUPP.availqty (CSV)");
