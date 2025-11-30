@@ -48,6 +48,26 @@ struct PartSuppRecord {
     static PartSuppRecord fromCSV(const std::string& line);
 };
 
+// TPC-H SUPPLIER 테이블 스키마
+struct SupplierRecord {
+    int_t suppkey;
+    std::string name;
+    std::string address;
+    int_t nationkey;
+    std::string phone;
+    decimal_t acctbal;
+    std::string comment;
+
+    // Record로 변환
+    Record toRecord() const;
+
+    // Record에서 생성
+    static SupplierRecord fromRecord(const Record& rec);
+
+    // CSV 라인에서 파싱
+    static SupplierRecord fromCSV(const std::string& line);
+};
+
 // Join 결과 레코드
 struct JoinResultRecord {
     PartRecord part;

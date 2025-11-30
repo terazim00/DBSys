@@ -142,6 +142,58 @@ PartSuppRecord PartSuppRecord::fromCSV(const std::string& line) {
     return partsupp;
 }
 
+// SupplierRecord 구현
+Record SupplierRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(suppkey));
+    fields.push_back(name);
+    fields.push_back(address);
+    fields.push_back(std::to_string(nationkey));
+    fields.push_back(phone);
+    fields.push_back(std::to_string(acctbal));
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+SupplierRecord SupplierRecord::fromRecord(const Record& rec) {
+    SupplierRecord supplier;
+    if (rec.getFieldCount() < 7) {
+        throw std::runtime_error("Invalid SUPPLIER record: expected 7 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    supplier.suppkey = safe_stoi(rec.getField(0), "SUPPLIER.suppkey");
+    supplier.name = rec.getField(1);
+    supplier.address = rec.getField(2);
+    supplier.nationkey = safe_stoi(rec.getField(3), "SUPPLIER.nationkey");
+    supplier.phone = rec.getField(4);
+    supplier.acctbal = safe_stof(rec.getField(5), "SUPPLIER.acctbal");
+    supplier.comment = rec.getField(6);
+    return supplier;
+}
+
+SupplierRecord SupplierRecord::fromCSV(const std::string& line) {
+    SupplierRecord supplier;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    supplier.suppkey = safe_stoi(field, "SUPPLIER.suppkey (CSV)");
+
+    std::getline(ss, supplier.name, '|');
+    std::getline(ss, supplier.address, '|');
+
+    std::getline(ss, field, '|');
+    supplier.nationkey = safe_stoi(field, "SUPPLIER.nationkey (CSV)");
+
+    std::getline(ss, supplier.phone, '|');
+
+    std::getline(ss, field, '|');
+    supplier.acctbal = safe_stof(field, "SUPPLIER.acctbal (CSV)");
+
+    std::getline(ss, supplier.comment, '|');
+
+    return supplier;
+}
+
 // JoinResultRecord 구현
 Record JoinResultRecord::toRecord() const {
     std::vector<std::string> fields;
@@ -271,6 +323,9 @@ void convertCSVToBlocks(const std::string& csv_file,
             } else if (table_type == "PARTSUPP") {
                 PartSuppRecord partsupp = PartSuppRecord::fromCSV(line);
                 record = partsupp.toRecord();
+            } else if (table_type == "SUPPLIER") {
+                SupplierRecord supplier = SupplierRecord::fromCSV(line);
+                record = supplier.toRecord();
             } else {
                 throw std::runtime_error("Unknown table type: " + table_type);
             }

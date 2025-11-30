@@ -12,6 +12,8 @@ void TableInfo::initFieldNames() {
                       "size", "container", "retailprice", "comment"};
     } else if (table_type == "PARTSUPP") {
         field_names = {"partkey", "suppkey", "availqty", "supplycost", "comment"};
+    } else if (table_type == "SUPPLIER") {
+        field_names = {"suppkey", "name", "address", "nationkey", "phone", "acctbal", "comment"};
     }
     // 추가 테이블 타입은 여기에 확장
 }

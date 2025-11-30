@@ -61,13 +61,13 @@ void printUsage(const char* program_name) {
     std::cout << "  --convert-csv        Convert CSV files to block format\n";
     std::cout << "      --csv-file FILE      Input CSV file path\n";
     std::cout << "      --block-file FILE    Output block file path\n";
-    std::cout << "      --table-type TYPE    Table type (PART or PARTSUPP)\n";
+    std::cout << "      --table-type TYPE    Table type (PART, PARTSUPP, or SUPPLIER)\n";
     std::cout << "      --block-size SIZE    Block size in bytes (default: 4096)\n\n";
     std::cout << "  --join               Perform Block Nested Loops Join (2 tables)\n";
     std::cout << "      --outer-table FILE   Outer table file (block format)\n";
     std::cout << "      --inner-table FILE   Inner table file (block format)\n";
-    std::cout << "      --outer-type TYPE    Outer table type (PART or PARTSUPP)\n";
-    std::cout << "      --inner-type TYPE    Inner table type (PART or PARTSUPP)\n";
+    std::cout << "      --outer-type TYPE    Outer table type (PART, PARTSUPP, or SUPPLIER)\n";
+    std::cout << "      --inner-type TYPE    Inner table type (PART, PARTSUPP, or SUPPLIER)\n";
     std::cout << "      --output FILE        Output file path\n";
     std::cout << "      --buffer-size NUM    Number of buffer blocks (default: 10)\n";
     std::cout << "      --block-size SIZE    Block size in bytes (default: 4096)\n\n";
