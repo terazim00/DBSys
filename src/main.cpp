@@ -14,9 +14,9 @@
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " [OPTION]...\n\n";
     std::cout << "Options:\n";
-    std::cout << "  --convert-csv        Convert TBL files to block format\n";
-    std::cout << "      --csv-file FILE      Input TBL file path (pipe-delimited)\n";
-    std::cout << "      --block-file FILE    Output block file path (.dat)\n";
+    std::cout << "  --convert            Convert TBL files to block format (.dat)\n";
+    std::cout << "      --input-file FILE    Input TBL file path (pipe-delimited)\n";
+    std::cout << "      --output-file FILE   Output block file path (.dat)\n";
     std::cout << "      --table-type TYPE    Table type: PART, PARTSUPP, SUPPLIER,\n";
     std::cout << "                           CUSTOMER, ORDERS, LINEITEM, NATION, REGION\n";
     std::cout << "      --block-size SIZE    Block size in bytes (default: 4096)\n\n";
@@ -47,10 +47,10 @@ void printUsage(const char* program_name) {
     std::cout << "      --output-dir DIR     Output directory for result files\n\n";
     std::cout << "Examples:\n";
     std::cout << "  # Convert TBL files to block format\n";
-    std::cout << "  " << program_name << " --convert-csv --csv-file data/part.tbl \\\n";
-    std::cout << "      --block-file data/part.dat --table-type PART\n";
-    std::cout << "  " << program_name << " --convert-csv --csv-file data/orders.tbl \\\n";
-    std::cout << "      --block-file data/orders.dat --table-type ORDERS\n\n";
+    std::cout << "  " << program_name << " --convert --input-file data/part.tbl \\\n";
+    std::cout << "      --output-file data/part.dat --table-type PART\n";
+    std::cout << "  " << program_name << " --convert --input-file data/orders.tbl \\\n";
+    std::cout << "      --output-file data/orders.dat --table-type ORDERS\n\n";
     std::cout << "  # BNLJ: PART ⋈ PARTSUPP on partkey\n";
     std::cout << "  " << program_name << " --join --outer-table data/part.dat \\\n";
     std::cout << "      --inner-table data/partsupp.dat --outer-type PART \\\n";
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
         }
 
         std::string mode;
-        std::string csv_file, block_file, table_type;
+        std::string input_file, output_file_convert, table_type;
         std::string outer_table, inner_table, outer_type, inner_type, output_file;
         std::string build_table, probe_table, build_type, probe_type;
         std::string output_dir;
@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) {
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
 
-            if (arg == "--convert-csv") {
+            if (arg == "--convert") {
                 mode = "convert";
             } else if (arg == "--join") {
                 mode = "join";
@@ -106,10 +106,10 @@ int main(int argc, char* argv[]) {
                 mode = "hash-join";
             } else if (arg == "--compare-all") {
                 mode = "compare-all";
-            } else if (arg == "--csv-file" && i + 1 < argc) {
-                csv_file = argv[++i];
-            } else if (arg == "--block-file" && i + 1 < argc) {
-                block_file = argv[++i];
+            } else if (arg == "--input-file" && i + 1 < argc) {
+                input_file = argv[++i];
+            } else if (arg == "--output-file" && i + 1 < argc) {
+                output_file_convert = argv[++i];
             } else if (arg == "--table-type" && i + 1 < argc) {
                 table_type = argv[++i];
             } else if (arg == "--outer-table" && i + 1 < argc) {
@@ -148,21 +148,22 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // CSV 변환 모드
+        // TBL 변환 모드
         if (mode == "convert") {
-            if (csv_file.empty() || block_file.empty() || table_type.empty()) {
-                std::cerr << "Error: Missing required arguments for CSV conversion\n";
+            if (input_file.empty() || output_file_convert.empty() || table_type.empty()) {
+                std::cerr << "Error: Missing required arguments for TBL conversion\n";
+                std::cerr << "Required: --input-file, --output-file, --table-type\n";
                 printUsage(argv[0]);
                 return 1;
             }
 
-            std::cout << "Converting CSV to block format...\n";
-            std::cout << "Input: " << csv_file << "\n";
-            std::cout << "Output: " << block_file << "\n";
+            std::cout << "Converting TBL to block format...\n";
+            std::cout << "Input: " << input_file << "\n";
+            std::cout << "Output: " << output_file_convert << "\n";
             std::cout << "Table Type: " << table_type << "\n";
             std::cout << "Block Size: " << block_size << " bytes\n\n";
 
-            convertCSVToBlocks(csv_file, block_file, table_type, block_size);
+            convertTBLToBlocks(input_file, output_file_convert, table_type, block_size);
 
             std::cout << "Conversion completed successfully!\n";
         }
@@ -244,7 +245,7 @@ int main(int argc, char* argv[]) {
             std::cout << "\nPerformance comparison completed!\n";
         }
         else {
-            std::cerr << "Error: Please specify one of: --convert-csv, --join, --hash-join, --compare-all\n";
+            std::cerr << "Error: Please specify one of: --convert, --join, --hash-join, --compare-all\n";
             printUsage(argv[0]);
             return 1;
         }

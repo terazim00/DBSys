@@ -592,14 +592,14 @@ bool TableWriter::writeBlock(const Block* block) {
     return file.good();
 }
 
-// CSV를 블록 파일로 변환
-void convertCSVToBlocks(const std::string& csv_file,
+// TBL 파일을 블록 파일로 변환
+void convertTBLToBlocks(const std::string& tbl_file,
                         const std::string& block_file,
                         const std::string& table_type,
                         size_t block_size) {
-    std::ifstream input(csv_file);
+    std::ifstream input(tbl_file);
     if (!input.is_open()) {
-        throw std::runtime_error("Failed to open CSV file: " + csv_file);
+        throw std::runtime_error("Failed to open TBL file: " + tbl_file);
     }
 
     TableWriter writer(block_file, nullptr);
@@ -667,6 +667,6 @@ void convertCSVToBlocks(const std::string& csv_file,
     }
 
     input.close();
-    std::cout << "Converted " << record_count << " records from " << csv_file
+    std::cout << "Converted " << record_count << " records from " << tbl_file
               << " to " << block_file << std::endl;
 }

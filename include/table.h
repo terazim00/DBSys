@@ -199,7 +199,7 @@ public:
 };
 
 // TBL 파일(파이프 구분 텍스트)을 블록 기반 .dat 파일로 변환
-void convertCSVToBlocks(const std::string& tbl_file,
+void convertTBLToBlocks(const std::string& tbl_file,
                         const std::string& block_file,
                         const std::string& table_type,
                         size_t block_size = DEFAULT_BLOCK_SIZE);
