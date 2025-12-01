@@ -4,6 +4,7 @@
 #include "table.h"
 #include "buffer.h"
 #include "join.h"
+#include "optimized_join.h"
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -27,20 +28,40 @@ void printUsage(const char* program_name) {
     std::cout << "      --output FILE        Output file path\n";
     std::cout << "      --buffer-size NUM    Number of buffer blocks (default: 10)\n";
     std::cout << "      --block-size SIZE    Block size in bytes (default: 4096)\n\n";
+    std::cout << "  --hash-join          Perform Hash Join (2 tables)\n";
+    std::cout << "      --build-table FILE   Build table file (smaller table, block format)\n";
+    std::cout << "      --probe-table FILE   Probe table file (larger table, block format)\n";
+    std::cout << "      --build-type TYPE    Build table type (PART, PARTSUPP, or SUPPLIER)\n";
+    std::cout << "      --probe-type TYPE    Probe table type (PART, PARTSUPP, or SUPPLIER)\n";
+    std::cout << "      --join-key KEY       Join key field name (e.g., partkey, suppkey)\n";
+    std::cout << "      --output FILE        Output file path\n";
+    std::cout << "      --block-size SIZE    Block size in bytes (default: 4096)\n\n";
+    std::cout << "  --compare-all        Compare BNLJ and Hash Join performance\n";
+    std::cout << "      --outer-table FILE   First table file (block format)\n";
+    std::cout << "      --inner-table FILE   Second table file (block format)\n";
+    std::cout << "      --outer-type TYPE    First table type (PART, PARTSUPP, or SUPPLIER)\n";
+    std::cout << "      --inner-type TYPE    Second table type (PART, PARTSUPP, or SUPPLIER)\n";
+    std::cout << "      --join-key KEY       Join key field name (e.g., partkey, suppkey)\n";
+    std::cout << "      --output-dir DIR     Output directory for result files\n\n";
     std::cout << "Examples:\n";
     std::cout << "  # Convert PART CSV to block format\n";
     std::cout << "  " << program_name << " --convert-csv --csv-file data/part.tbl \\\n";
     std::cout << "      --block-file data/part.dat --table-type PART\n\n";
-    std::cout << "  # Join PART and PARTSUPP tables on partkey\n";
+    std::cout << "  # Block Nested Loops Join: PART and PARTSUPP on partkey\n";
     std::cout << "  " << program_name << " --join --outer-table data/part.dat \\\n";
     std::cout << "      --inner-table data/partsupp.dat --outer-type PART \\\n";
     std::cout << "      --inner-type PARTSUPP --join-key partkey \\\n";
     std::cout << "      --output output/result.dat --buffer-size 20\n\n";
-    std::cout << "  # Join PARTSUPP and SUPPLIER tables on suppkey\n";
-    std::cout << "  " << program_name << " --join --outer-table data/partsupp.dat \\\n";
-    std::cout << "      --inner-table data/supplier.dat --outer-type PARTSUPP \\\n";
-    std::cout << "      --inner-type SUPPLIER --join-key suppkey \\\n";
-    std::cout << "      --output output/result.dat --buffer-size 20\n";
+    std::cout << "  # Hash Join: PART (build) and PARTSUPP (probe) on partkey\n";
+    std::cout << "  " << program_name << " --hash-join --build-table data/part.dat \\\n";
+    std::cout << "      --probe-table data/partsupp.dat --build-type PART \\\n";
+    std::cout << "      --probe-type PARTSUPP --join-key partkey \\\n";
+    std::cout << "      --output output/hash_result.dat\n\n";
+    std::cout << "  # Compare all algorithms\n";
+    std::cout << "  " << program_name << " --compare-all --outer-table data/part.dat \\\n";
+    std::cout << "      --inner-table data/partsupp.dat --outer-type PART \\\n";
+    std::cout << "      --inner-type PARTSUPP --join-key partkey \\\n";
+    std::cout << "      --output-dir output\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -53,6 +74,8 @@ int main(int argc, char* argv[]) {
         std::string mode;
         std::string csv_file, block_file, table_type;
         std::string outer_table, inner_table, outer_type, inner_type, output_file;
+        std::string build_table, probe_table, build_type, probe_type;
+        std::string output_dir;
         std::string join_key;
         size_t buffer_size = 10;
         size_t block_size = DEFAULT_BLOCK_SIZE;
@@ -65,6 +88,10 @@ int main(int argc, char* argv[]) {
                 mode = "convert";
             } else if (arg == "--join") {
                 mode = "join";
+            } else if (arg == "--hash-join") {
+                mode = "hash-join";
+            } else if (arg == "--compare-all") {
+                mode = "compare-all";
             } else if (arg == "--csv-file" && i + 1 < argc) {
                 csv_file = argv[++i];
             } else if (arg == "--block-file" && i + 1 < argc) {
@@ -79,10 +106,20 @@ int main(int argc, char* argv[]) {
                 outer_type = argv[++i];
             } else if (arg == "--inner-type" && i + 1 < argc) {
                 inner_type = argv[++i];
+            } else if (arg == "--build-table" && i + 1 < argc) {
+                build_table = argv[++i];
+            } else if (arg == "--probe-table" && i + 1 < argc) {
+                probe_table = argv[++i];
+            } else if (arg == "--build-type" && i + 1 < argc) {
+                build_type = argv[++i];
+            } else if (arg == "--probe-type" && i + 1 < argc) {
+                probe_type = argv[++i];
             } else if (arg == "--join-key" && i + 1 < argc) {
                 join_key = argv[++i];
             } else if (arg == "--output" && i + 1 < argc) {
                 output_file = argv[++i];
+            } else if (arg == "--output-dir" && i + 1 < argc) {
+                output_dir = argv[++i];
             } else if (arg == "--buffer-size" && i + 1 < argc) {
                 buffer_size = std::atoi(argv[++i]);
             } else if (arg == "--block-size" && i + 1 < argc) {
@@ -144,8 +181,56 @@ int main(int argc, char* argv[]) {
 
             std::cout << "\nJoin completed successfully!\n";
         }
+        // Hash Join 모드
+        else if (mode == "hash-join") {
+            if (build_table.empty() || probe_table.empty() ||
+                build_type.empty() || probe_type.empty() ||
+                join_key.empty() || output_file.empty()) {
+                std::cerr << "Error: Missing required arguments for hash join\n";
+                std::cerr << "Required: --build-table, --probe-table, --build-type, --probe-type, --join-key, --output\n";
+                printUsage(argv[0]);
+                return 1;
+            }
+
+            std::cout << "=== Hash Join ===" << std::endl;
+            std::cout << "Build Table: " << build_table << " (" << build_type << ")" << std::endl;
+            std::cout << "Probe Table: " << probe_table << " (" << probe_type << ")" << std::endl;
+            std::cout << "Join Key: " << join_key << std::endl;
+            std::cout << "Output File: " << output_file << std::endl;
+            std::cout << "Block Size: " << block_size << " bytes" << std::endl;
+            std::cout << "\nExecuting hash join...\n" << std::endl;
+
+            HashJoin join(build_table, probe_table, output_file,
+                         build_type, probe_type, join_key, block_size);
+            join.execute();
+
+            std::cout << "\nHash Join completed successfully!\n";
+        }
+        // 성능 비교 모드
+        else if (mode == "compare-all") {
+            if (outer_table.empty() || inner_table.empty() ||
+                outer_type.empty() || inner_type.empty() ||
+                join_key.empty() || output_dir.empty()) {
+                std::cerr << "Error: Missing required arguments for performance comparison\n";
+                std::cerr << "Required: --outer-table, --inner-table, --outer-type, --inner-type, --join-key, --output-dir\n";
+                printUsage(argv[0]);
+                return 1;
+            }
+
+            std::cout << "=== Performance Comparison ===" << std::endl;
+            std::cout << "Table 1: " << outer_table << " (" << outer_type << ")" << std::endl;
+            std::cout << "Table 2: " << inner_table << " (" << inner_type << ")" << std::endl;
+            std::cout << "Join Key: " << join_key << std::endl;
+            std::cout << "Output Directory: " << output_dir << std::endl;
+            std::cout << "\nRunning performance tests...\n" << std::endl;
+
+            PerformanceTester::compareAll(outer_table, inner_table, output_dir,
+                                         outer_type, inner_type, join_key);
+
+            std::cout << "\nPerformance comparison completed!\n";
+        }
         else {
-            std::cerr << "Error: Please specify either --convert-csv or --join\n";
+            std::cerr << "Error: Please specify one of: --convert-csv, --join, --hash-join, --compare-all\n";
             printUsage(argv[0]);
             return 1;
         }
