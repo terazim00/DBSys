@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+*.o
+
+# Executables
+dbsys
+simple_usage
+file_manager_example
+join_demo
+performance_test
+
+# Data files
+data/*.dat
+output/*.dat
+
+# System files
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
