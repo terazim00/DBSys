@@ -69,7 +69,68 @@ public:
 };
 
 // ============================================================================
-// 2. 멀티스레드 Block Nested Loops Join
+// 2. Sort-Merge Join
+// ============================================================================
+/**
+ * Sort-Merge Join 구현
+ *
+ * 알고리즘:
+ * 1. Sort Phase: 두 테이블을 조인 키로 정렬
+ * 2. Merge Phase: 정렬된 테이블을 병합하며 조인
+ *
+ * 시간 복잡도: O(|R|log|R| + |S|log|S| + |R| + |S|)
+ * I/O 복잡도: 3(|R| + |S|) - 읽기, 쓰기(정렬), 읽기(병합)
+ *
+ * 장점:
+ * - 정렬된 데이터에 대해 매우 효율적
+ * - 외부 정렬로 대용량 데이터 처리 가능
+ * - 해시 테이블에 비해 메모리 요구량 적음
+ *
+ * 단점:
+ * - 정렬 오버헤드
+ * - 임시 파일 필요
+ */
+class SortMergeJoin {
+private:
+    std::string outer_table_file;
+    std::string inner_table_file;
+    std::string output_file;
+    std::string outer_table_type;
+    std::string inner_table_type;
+    std::string join_key;
+    size_t buffer_size;
+    size_t block_size;
+    Statistics stats;
+
+    // 외부 정렬 수행
+    void externalSort(const std::string& input_file,
+                     const std::string& output_file,
+                     const std::string& table_type);
+
+    // 정렬된 테이블 병합
+    void mergeJoin(const std::string& sorted_outer,
+                  const std::string& sorted_inner,
+                  TableWriter& writer);
+
+    // 레코드에서 조인 키 값 추출
+    int_t getJoinKeyValue(const Record& rec, const std::string& table_type);
+
+public:
+    SortMergeJoin(const std::string& outer_file,
+                  const std::string& inner_file,
+                  const std::string& out_file,
+                  const std::string& outer_type,
+                  const std::string& inner_type,
+                  const std::string& join_key_name,
+                  size_t buf_size = 10,
+                  size_t blk_size = DEFAULT_BLOCK_SIZE);
+
+    void execute();
+    const Statistics& getStatistics() const { return stats; }
+};
+
+// ============================================================================
+// 3. 멀티스레드 Block Nested Loops Join
 // ============================================================================
 /**
  * 멀티스레드 BNLJ 구현
@@ -120,7 +181,7 @@ public:
 };
 
 // ============================================================================
-// 3. 프리페칭 최적화 BNLJ
+// 4. 프리페칭 최적화 BNLJ
 // ============================================================================
 /**
  * 프리페칭을 적용한 BNLJ
@@ -190,6 +251,12 @@ public:
         const std::string& build_file,
         const std::string& probe_file,
         const std::string& output_file);
+
+    static PerformanceResult testSortMergeJoin(
+        const std::string& outer_file,
+        const std::string& inner_file,
+        const std::string& output_file,
+        size_t buffer_size);
 
     static PerformanceResult testMultithreaded(
         const std::string& outer_file,
