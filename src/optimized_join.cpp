@@ -41,6 +41,43 @@ int_t HashJoin::getJoinKeyValue(const Record& rec, const std::string& table_type
         SupplierRecord supplier = SupplierRecord::fromRecord(rec);
         if (join_key == "suppkey") {
             return supplier.suppkey;
+        } else if (join_key == "nationkey") {
+            return supplier.nationkey;
+        }
+    } else if (table_type == "CUSTOMER") {
+        CustomerRecord customer = CustomerRecord::fromRecord(rec);
+        if (join_key == "custkey") {
+            return customer.custkey;
+        } else if (join_key == "nationkey") {
+            return customer.nationkey;
+        }
+    } else if (table_type == "ORDERS") {
+        OrdersRecord orders = OrdersRecord::fromRecord(rec);
+        if (join_key == "orderkey") {
+            return orders.orderkey;
+        } else if (join_key == "custkey") {
+            return orders.custkey;
+        }
+    } else if (table_type == "LINEITEM") {
+        LineItemRecord lineitem = LineItemRecord::fromRecord(rec);
+        if (join_key == "orderkey") {
+            return lineitem.orderkey;
+        } else if (join_key == "partkey") {
+            return lineitem.partkey;
+        } else if (join_key == "suppkey") {
+            return lineitem.suppkey;
+        }
+    } else if (table_type == "NATION") {
+        NationRecord nation = NationRecord::fromRecord(rec);
+        if (join_key == "nationkey") {
+            return nation.nationkey;
+        } else if (join_key == "regionkey") {
+            return nation.regionkey;
+        }
+    } else if (table_type == "REGION") {
+        RegionRecord region = RegionRecord::fromRecord(rec);
+        if (join_key == "regionkey") {
+            return region.regionkey;
         }
     }
 

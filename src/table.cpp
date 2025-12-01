@@ -216,6 +216,282 @@ SupplierRecord SupplierRecord::fromCSV(const std::string& line) {
     return supplier;
 }
 
+// CustomerRecord 구현
+Record CustomerRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(custkey));
+    fields.push_back(name);
+    fields.push_back(address);
+    fields.push_back(std::to_string(nationkey));
+    fields.push_back(phone);
+    fields.push_back(std::to_string(acctbal));
+    fields.push_back(mktsegment);
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+CustomerRecord CustomerRecord::fromRecord(const Record& rec) {
+    CustomerRecord customer;
+    if (rec.getFieldCount() < 8) {
+        throw std::runtime_error("Invalid CUSTOMER record: expected 8 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    customer.custkey = safe_stoi(rec.getField(0), "CUSTOMER.custkey");
+    customer.name = rec.getField(1);
+    customer.address = rec.getField(2);
+    customer.nationkey = safe_stoi(rec.getField(3), "CUSTOMER.nationkey");
+    customer.phone = rec.getField(4);
+    customer.acctbal = safe_stof(rec.getField(5), "CUSTOMER.acctbal");
+    customer.mktsegment = rec.getField(6);
+    customer.comment = rec.getField(7);
+    return customer;
+}
+
+CustomerRecord CustomerRecord::fromCSV(const std::string& line) {
+    CustomerRecord customer;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    customer.custkey = safe_stoi(field, "CUSTOMER.custkey (TBL)");
+
+    std::getline(ss, customer.name, '|');
+    std::getline(ss, customer.address, '|');
+
+    std::getline(ss, field, '|');
+    customer.nationkey = safe_stoi(field, "CUSTOMER.nationkey (TBL)");
+
+    std::getline(ss, customer.phone, '|');
+
+    std::getline(ss, field, '|');
+    customer.acctbal = safe_stof(field, "CUSTOMER.acctbal (TBL)");
+
+    std::getline(ss, customer.mktsegment, '|');
+    std::getline(ss, customer.comment, '|');
+
+    return customer;
+}
+
+// OrdersRecord 구현
+Record OrdersRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(orderkey));
+    fields.push_back(std::to_string(custkey));
+    fields.push_back(orderstatus);
+    fields.push_back(std::to_string(totalprice));
+    fields.push_back(orderdate);
+    fields.push_back(orderpriority);
+    fields.push_back(clerk);
+    fields.push_back(std::to_string(shippriority));
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+OrdersRecord OrdersRecord::fromRecord(const Record& rec) {
+    OrdersRecord orders;
+    if (rec.getFieldCount() < 9) {
+        throw std::runtime_error("Invalid ORDERS record: expected 9 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    orders.orderkey = safe_stoi(rec.getField(0), "ORDERS.orderkey");
+    orders.custkey = safe_stoi(rec.getField(1), "ORDERS.custkey");
+    orders.orderstatus = rec.getField(2);
+    orders.totalprice = safe_stof(rec.getField(3), "ORDERS.totalprice");
+    orders.orderdate = rec.getField(4);
+    orders.orderpriority = rec.getField(5);
+    orders.clerk = rec.getField(6);
+    orders.shippriority = safe_stoi(rec.getField(7), "ORDERS.shippriority");
+    orders.comment = rec.getField(8);
+    return orders;
+}
+
+OrdersRecord OrdersRecord::fromCSV(const std::string& line) {
+    OrdersRecord orders;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    orders.orderkey = safe_stoi(field, "ORDERS.orderkey (TBL)");
+
+    std::getline(ss, field, '|');
+    orders.custkey = safe_stoi(field, "ORDERS.custkey (TBL)");
+
+    std::getline(ss, orders.orderstatus, '|');
+
+    std::getline(ss, field, '|');
+    orders.totalprice = safe_stof(field, "ORDERS.totalprice (TBL)");
+
+    std::getline(ss, orders.orderdate, '|');
+    std::getline(ss, orders.orderpriority, '|');
+    std::getline(ss, orders.clerk, '|');
+
+    std::getline(ss, field, '|');
+    orders.shippriority = safe_stoi(field, "ORDERS.shippriority (TBL)");
+
+    std::getline(ss, orders.comment, '|');
+
+    return orders;
+}
+
+// LineItemRecord 구현
+Record LineItemRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(orderkey));
+    fields.push_back(std::to_string(partkey));
+    fields.push_back(std::to_string(suppkey));
+    fields.push_back(std::to_string(linenumber));
+    fields.push_back(std::to_string(quantity));
+    fields.push_back(std::to_string(extendedprice));
+    fields.push_back(std::to_string(discount));
+    fields.push_back(std::to_string(tax));
+    fields.push_back(returnflag);
+    fields.push_back(linestatus);
+    fields.push_back(shipdate);
+    fields.push_back(commitdate);
+    fields.push_back(receiptdate);
+    fields.push_back(shipinstruct);
+    fields.push_back(shipmode);
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+LineItemRecord LineItemRecord::fromRecord(const Record& rec) {
+    LineItemRecord lineitem;
+    if (rec.getFieldCount() < 16) {
+        throw std::runtime_error("Invalid LINEITEM record: expected 16 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    lineitem.orderkey = safe_stoi(rec.getField(0), "LINEITEM.orderkey");
+    lineitem.partkey = safe_stoi(rec.getField(1), "LINEITEM.partkey");
+    lineitem.suppkey = safe_stoi(rec.getField(2), "LINEITEM.suppkey");
+    lineitem.linenumber = safe_stoi(rec.getField(3), "LINEITEM.linenumber");
+    lineitem.quantity = safe_stof(rec.getField(4), "LINEITEM.quantity");
+    lineitem.extendedprice = safe_stof(rec.getField(5), "LINEITEM.extendedprice");
+    lineitem.discount = safe_stof(rec.getField(6), "LINEITEM.discount");
+    lineitem.tax = safe_stof(rec.getField(7), "LINEITEM.tax");
+    lineitem.returnflag = rec.getField(8);
+    lineitem.linestatus = rec.getField(9);
+    lineitem.shipdate = rec.getField(10);
+    lineitem.commitdate = rec.getField(11);
+    lineitem.receiptdate = rec.getField(12);
+    lineitem.shipinstruct = rec.getField(13);
+    lineitem.shipmode = rec.getField(14);
+    lineitem.comment = rec.getField(15);
+    return lineitem;
+}
+
+LineItemRecord LineItemRecord::fromCSV(const std::string& line) {
+    LineItemRecord lineitem;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    lineitem.orderkey = safe_stoi(field, "LINEITEM.orderkey (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.partkey = safe_stoi(field, "LINEITEM.partkey (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.suppkey = safe_stoi(field, "LINEITEM.suppkey (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.linenumber = safe_stoi(field, "LINEITEM.linenumber (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.quantity = safe_stof(field, "LINEITEM.quantity (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.extendedprice = safe_stof(field, "LINEITEM.extendedprice (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.discount = safe_stof(field, "LINEITEM.discount (TBL)");
+
+    std::getline(ss, field, '|');
+    lineitem.tax = safe_stof(field, "LINEITEM.tax (TBL)");
+
+    std::getline(ss, lineitem.returnflag, '|');
+    std::getline(ss, lineitem.linestatus, '|');
+    std::getline(ss, lineitem.shipdate, '|');
+    std::getline(ss, lineitem.commitdate, '|');
+    std::getline(ss, lineitem.receiptdate, '|');
+    std::getline(ss, lineitem.shipinstruct, '|');
+    std::getline(ss, lineitem.shipmode, '|');
+    std::getline(ss, lineitem.comment, '|');
+
+    return lineitem;
+}
+
+// NationRecord 구현
+Record NationRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(nationkey));
+    fields.push_back(name);
+    fields.push_back(std::to_string(regionkey));
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+NationRecord NationRecord::fromRecord(const Record& rec) {
+    NationRecord nation;
+    if (rec.getFieldCount() < 4) {
+        throw std::runtime_error("Invalid NATION record: expected 4 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    nation.nationkey = safe_stoi(rec.getField(0), "NATION.nationkey");
+    nation.name = rec.getField(1);
+    nation.regionkey = safe_stoi(rec.getField(2), "NATION.regionkey");
+    nation.comment = rec.getField(3);
+    return nation;
+}
+
+NationRecord NationRecord::fromCSV(const std::string& line) {
+    NationRecord nation;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    nation.nationkey = safe_stoi(field, "NATION.nationkey (TBL)");
+
+    std::getline(ss, nation.name, '|');
+
+    std::getline(ss, field, '|');
+    nation.regionkey = safe_stoi(field, "NATION.regionkey (TBL)");
+
+    std::getline(ss, nation.comment, '|');
+
+    return nation;
+}
+
+// RegionRecord 구현
+Record RegionRecord::toRecord() const {
+    std::vector<std::string> fields;
+    fields.push_back(std::to_string(regionkey));
+    fields.push_back(name);
+    fields.push_back(comment);
+    return Record(fields);
+}
+
+RegionRecord RegionRecord::fromRecord(const Record& rec) {
+    RegionRecord region;
+    if (rec.getFieldCount() < 3) {
+        throw std::runtime_error("Invalid REGION record: expected 3 fields, got " + std::to_string(rec.getFieldCount()));
+    }
+    region.regionkey = safe_stoi(rec.getField(0), "REGION.regionkey");
+    region.name = rec.getField(1);
+    region.comment = rec.getField(2);
+    return region;
+}
+
+RegionRecord RegionRecord::fromCSV(const std::string& line) {
+    RegionRecord region;
+    std::stringstream ss(line);
+    std::string field;
+
+    std::getline(ss, field, '|');
+    region.regionkey = safe_stoi(field, "REGION.regionkey (TBL)");
+
+    std::getline(ss, region.name, '|');
+    std::getline(ss, region.comment, '|');
+
+    return region;
+}
+
 // JoinResultRecord 구현
 Record JoinResultRecord::toRecord() const {
     std::vector<std::string> fields;
@@ -316,14 +592,14 @@ bool TableWriter::writeBlock(const Block* block) {
     return file.good();
 }
 
-// CSV를 블록 파일로 변환
-void convertCSVToBlocks(const std::string& csv_file,
+// TBL 파일을 블록 파일로 변환
+void convertTBLToBlocks(const std::string& tbl_file,
                         const std::string& block_file,
                         const std::string& table_type,
                         size_t block_size) {
-    std::ifstream input(csv_file);
+    std::ifstream input(tbl_file);
     if (!input.is_open()) {
-        throw std::runtime_error("Failed to open CSV file: " + csv_file);
+        throw std::runtime_error("Failed to open TBL file: " + tbl_file);
     }
 
     TableWriter writer(block_file, nullptr);
@@ -348,6 +624,21 @@ void convertCSVToBlocks(const std::string& csv_file,
             } else if (table_type == "SUPPLIER") {
                 SupplierRecord supplier = SupplierRecord::fromCSV(line);
                 record = supplier.toRecord();
+            } else if (table_type == "CUSTOMER") {
+                CustomerRecord customer = CustomerRecord::fromCSV(line);
+                record = customer.toRecord();
+            } else if (table_type == "ORDERS") {
+                OrdersRecord orders = OrdersRecord::fromCSV(line);
+                record = orders.toRecord();
+            } else if (table_type == "LINEITEM") {
+                LineItemRecord lineitem = LineItemRecord::fromCSV(line);
+                record = lineitem.toRecord();
+            } else if (table_type == "NATION") {
+                NationRecord nation = NationRecord::fromCSV(line);
+                record = nation.toRecord();
+            } else if (table_type == "REGION") {
+                RegionRecord region = RegionRecord::fromCSV(line);
+                record = region.toRecord();
             } else {
                 throw std::runtime_error("Unknown table type: " + table_type);
             }
@@ -376,6 +667,6 @@ void convertCSVToBlocks(const std::string& csv_file,
     }
 
     input.close();
-    std::cout << "Converted " << record_count << " records from " << csv_file
+    std::cout << "Converted " << record_count << " records from " << tbl_file
               << " to " << block_file << std::endl;
 }

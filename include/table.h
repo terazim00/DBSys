@@ -64,8 +64,88 @@ struct SupplierRecord {
     // Record에서 생성
     static SupplierRecord fromRecord(const Record& rec);
 
-    // CSV 라인에서 파싱
+    // TBL 파일 라인에서 파싱
     static SupplierRecord fromCSV(const std::string& line);
+};
+
+// TPC-H CUSTOMER 테이블 스키마
+struct CustomerRecord {
+    int_t custkey;
+    std::string name;
+    std::string address;
+    int_t nationkey;
+    std::string phone;
+    decimal_t acctbal;
+    std::string mktsegment;
+    std::string comment;
+
+    Record toRecord() const;
+    static CustomerRecord fromRecord(const Record& rec);
+    static CustomerRecord fromCSV(const std::string& line);
+};
+
+// TPC-H ORDERS 테이블 스키마
+struct OrdersRecord {
+    int_t orderkey;
+    int_t custkey;
+    std::string orderstatus;
+    decimal_t totalprice;
+    std::string orderdate;
+    std::string orderpriority;
+    std::string clerk;
+    int_t shippriority;
+    std::string comment;
+
+    Record toRecord() const;
+    static OrdersRecord fromRecord(const Record& rec);
+    static OrdersRecord fromCSV(const std::string& line);
+};
+
+// TPC-H LINEITEM 테이블 스키마
+struct LineItemRecord {
+    int_t orderkey;
+    int_t partkey;
+    int_t suppkey;
+    int_t linenumber;
+    decimal_t quantity;
+    decimal_t extendedprice;
+    decimal_t discount;
+    decimal_t tax;
+    std::string returnflag;
+    std::string linestatus;
+    std::string shipdate;
+    std::string commitdate;
+    std::string receiptdate;
+    std::string shipinstruct;
+    std::string shipmode;
+    std::string comment;
+
+    Record toRecord() const;
+    static LineItemRecord fromRecord(const Record& rec);
+    static LineItemRecord fromCSV(const std::string& line);
+};
+
+// TPC-H NATION 테이블 스키마
+struct NationRecord {
+    int_t nationkey;
+    std::string name;
+    int_t regionkey;
+    std::string comment;
+
+    Record toRecord() const;
+    static NationRecord fromRecord(const Record& rec);
+    static NationRecord fromCSV(const std::string& line);
+};
+
+// TPC-H REGION 테이블 스키마
+struct RegionRecord {
+    int_t regionkey;
+    std::string name;
+    std::string comment;
+
+    Record toRecord() const;
+    static RegionRecord fromRecord(const Record& rec);
+    static RegionRecord fromCSV(const std::string& line);
 };
 
 // Join 결과 레코드
@@ -118,8 +198,8 @@ public:
     bool isOpen() const { return file.is_open(); }
 };
 
-// CSV 파일을 블록 기반 파일로 변환
-void convertCSVToBlocks(const std::string& csv_file,
+// TBL 파일(파이프 구분 텍스트)을 블록 기반 .dat 파일로 변환
+void convertTBLToBlocks(const std::string& tbl_file,
                         const std::string& block_file,
                         const std::string& table_type,
                         size_t block_size = DEFAULT_BLOCK_SIZE);
