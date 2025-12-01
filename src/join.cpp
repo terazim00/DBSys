@@ -5,13 +5,13 @@
 
 /**
  * ============================================================================
- * Block Nested Loops Join 구현
+ * Block Nested Loops Join 구현 (일반화 버전)
  * ============================================================================
  *
  * 알고리즘 개요:
  * - Outer 테이블 R을 (B-1)개 블록 단위로 읽음
  * - 각 outer 블록 세트에 대해 inner 테이블 S를 전체 스캔
- * - R.PARTKEY = S.PARTKEY 조건으로 조인
+ * - 지정된 조인 키로 조인 수행
  * - 결과를 출력 블록에 버퍼링 후 디스크에 쓰기
  *
  * 시간 복잡도: O((|R| / (B-1)) × |S|) - R, S는 블록 개수
@@ -34,6 +34,7 @@ BlockNestedLoopsJoin::BlockNestedLoopsJoin(
     const std::string& out_file,
     const std::string& outer_type,
     const std::string& inner_type,
+    const std::string& join_key_name,
     size_t buf_size,
     size_t blk_size)
     : outer_table_file(outer_file),
@@ -41,6 +42,7 @@ BlockNestedLoopsJoin::BlockNestedLoopsJoin(
       output_file(out_file),
       outer_table_type(outer_type),
       inner_table_type(inner_type),
+      join_key(join_key_name),
       buffer_size(buf_size),
       block_size(blk_size) {
 
@@ -80,7 +82,7 @@ void BlockNestedLoopsJoin::execute() {
 }
 
 // ============================================================================
-// 조인 수행 함수: 테이블 리더/라이터 초기화 및 조인 타입 분기
+// 조인 수행 함수: 테이블 리더/라이터 초기화 및 조인 실행
 // ============================================================================
 void BlockNestedLoopsJoin::performJoin() {
     // ========== 단계 1: 파일 리더/라이터 생성 ==========
@@ -93,27 +95,63 @@ void BlockNestedLoopsJoin::performJoin() {
     // buffer_size 개의 블록을 사전 할당
     BufferManager buffer_mgr(buffer_size, block_size);
 
-    // ========== 단계 3: 테이블 타입에 따라 조인 수행 ==========
-    // PART와 PARTSUPP 조인만 지원
-    if ((outer_table_type == "PART" && inner_table_type == "PARTSUPP") ||
-        (outer_table_type == "PARTSUPP" && inner_table_type == "PART")) {
-
-        bool part_is_outer = (outer_table_type == "PART");
-        joinPartAndPartSupp(outer_reader, inner_reader, writer, buffer_mgr, part_is_outer);
-    } else {
-        throw std::runtime_error("Unsupported table types for join");
-    }
+    // ========== 단계 3: 일반화된 조인 수행 ==========
+    joinTables(outer_reader, inner_reader, writer, buffer_mgr);
 }
 
 // ============================================================================
-// PART와 PARTSUPP 조인 함수: Block Nested Loops Join 알고리즘 구현
+// 레코드에서 조인 키 값 추출
 // ============================================================================
-void BlockNestedLoopsJoin::joinPartAndPartSupp(
+int_t BlockNestedLoopsJoin::getJoinKeyValue(const Record& rec, const std::string& table_type) {
+    if (table_type == "PART") {
+        PartRecord part = PartRecord::fromRecord(rec);
+        if (join_key == "partkey") {
+            return part.partkey;
+        }
+    } else if (table_type == "PARTSUPP") {
+        PartSuppRecord partsupp = PartSuppRecord::fromRecord(rec);
+        if (join_key == "partkey") {
+            return partsupp.partkey;
+        } else if (join_key == "suppkey") {
+            return partsupp.suppkey;
+        }
+    } else if (table_type == "SUPPLIER") {
+        SupplierRecord supplier = SupplierRecord::fromRecord(rec);
+        if (join_key == "suppkey") {
+            return supplier.suppkey;
+        }
+    }
+
+    throw std::runtime_error("Invalid join key '" + join_key + "' for table type '" + table_type + "'");
+}
+
+// ============================================================================
+// 두 레코드를 병합하여 조인 결과 생성
+// ============================================================================
+Record BlockNestedLoopsJoin::mergeRecords(const Record& outer_rec, const Record& inner_rec) {
+    Record result;
+
+    // Outer 레코드의 모든 필드 추가
+    for (size_t i = 0; i < outer_rec.getFieldCount(); ++i) {
+        result.addField(outer_rec.getField(i));
+    }
+
+    // Inner 레코드의 모든 필드 추가
+    for (size_t i = 0; i < inner_rec.getFieldCount(); ++i) {
+        result.addField(inner_rec.getField(i));
+    }
+
+    return result;
+}
+
+// ============================================================================
+// 일반화된 조인 함수: Block Nested Loops Join 알고리즘 구현
+// ============================================================================
+void BlockNestedLoopsJoin::joinTables(
     TableReader& outer_reader,
     TableReader& inner_reader,
     TableWriter& writer,
-    BufferManager& buffer_mgr,
-    bool part_is_outer) {
+    BufferManager& buffer_mgr) {
 
     // =========================================================================
     // 버퍼 할당 전략
@@ -206,75 +244,32 @@ void BlockNestedLoopsJoin::joinPartAndPartSupp(
             for (const auto& outer_rec : outer_records) {
                 for (const auto& inner_rec : inner_records) {
                     try {
-                        int_t outer_key, inner_key;
-
                         // =============================================================
-                        // 조인 조건 검사 및 결과 생성
+                        // 조인 조건 검사: 지정된 키 값이 같은지 확인
                         // =============================================================
-                        if (part_is_outer) {
-                            // Case 1: PART (outer) × PARTSUPP (inner)
-                            PartRecord part = PartRecord::fromRecord(outer_rec);
-                            PartSuppRecord partsupp = PartSuppRecord::fromRecord(inner_rec);
-                            outer_key = part.partkey;
-                            inner_key = partsupp.partkey;
+                        int_t outer_key = getJoinKeyValue(outer_rec, outer_table_type);
+                        int_t inner_key = getJoinKeyValue(inner_rec, inner_table_type);
 
-                            // 조인 조건: R.PARTKEY = S.PARTKEY
-                            if (outer_key == inner_key) {
-                                // 조인 결과 레코드 생성
-                                JoinResultRecord result;
-                                result.part = part;
-                                result.partsupp = partsupp;
+                        // 조인 조건: outer_key == inner_key
+                        if (outer_key == inner_key) {
+                            // 조인 결과 레코드 생성 (두 레코드 병합)
+                            Record result_rec = mergeRecords(outer_rec, inner_rec);
 
-                                Record result_rec = result.toRecord();
+                            // ---------------------------------------------
+                            // 출력 블록에 쓰기 (버퍼링)
+                            // ---------------------------------------------
+                            if (!output_writer.writeRecord(result_rec)) {
+                                // 블록이 가득 차면 디스크에 플러시
+                                writer.writeBlock(&output_block);
+                                output_block.clear();
 
-                                // ---------------------------------------------
-                                // 출력 블록에 쓰기 (버퍼링)
-                                // ---------------------------------------------
+                                // 새 블록에 다시 쓰기
                                 if (!output_writer.writeRecord(result_rec)) {
-                                    // 블록이 가득 차면 디스크에 플러시
-                                    writer.writeBlock(&output_block);
-                                    output_block.clear();
-
-                                    // 새 블록에 다시 쓰기
-                                    if (!output_writer.writeRecord(result_rec)) {
-                                        throw std::runtime_error("Result record too large");
-                                    }
+                                    throw std::runtime_error("Result record too large for block");
                                 }
-
-                                stats.output_records++;
                             }
-                        } else {
-                            // Case 2: PARTSUPP (outer) × PART (inner)
-                            PartSuppRecord partsupp = PartSuppRecord::fromRecord(outer_rec);
-                            PartRecord part = PartRecord::fromRecord(inner_rec);
-                            outer_key = partsupp.partkey;
-                            inner_key = part.partkey;
 
-                            // 조인 조건: R.PARTKEY = S.PARTKEY
-                            if (outer_key == inner_key) {
-                                // 조인 결과 레코드 생성
-                                JoinResultRecord result;
-                                result.part = part;
-                                result.partsupp = partsupp;
-
-                                Record result_rec = result.toRecord();
-
-                                // ---------------------------------------------
-                                // 출력 블록에 쓰기 (버퍼링)
-                                // ---------------------------------------------
-                                if (!output_writer.writeRecord(result_rec)) {
-                                    // 블록이 가득 차면 디스크에 플러시
-                                    writer.writeBlock(&output_block);
-                                    output_block.clear();
-
-                                    // 새 블록에 다시 쓰기
-                                    if (!output_writer.writeRecord(result_rec)) {
-                                        throw std::runtime_error("Result record too large");
-                                    }
-                                }
-
-                                stats.output_records++;
-                            }
+                            stats.output_records++;
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "Error during join: " << e.what() << std::endl;

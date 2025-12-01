@@ -166,7 +166,7 @@ void MultithreadedJoin::execute() {
 
     // 현재는 단일 스레드 BNLJ로 fallback
     BlockNestedLoopsJoin join(outer_table_file, inner_table_file, output_file,
-                             outer_table_type, inner_table_type,
+                             outer_table_type, inner_table_type, "partkey",
                              buffer_size, block_size);
     join.execute();
     stats = join.getStatistics();
@@ -200,7 +200,7 @@ void PrefetchingJoin::execute() {
 
     // 현재는 단일 스레드 BNLJ로 fallback
     BlockNestedLoopsJoin join(outer_table_file, inner_table_file, output_file,
-                             outer_table_type, inner_table_type,
+                             outer_table_type, inner_table_type, "partkey",
                              buffer_size, block_size);
     join.execute();
     stats = join.getStatistics();
@@ -235,7 +235,7 @@ PerformanceResult PerformanceTester::testBlockNestedLoops(
     std::cout << "\n=== Testing Block Nested Loops Join ===" << std::endl;
 
     BlockNestedLoopsJoin join(outer_file, inner_file, output_file,
-                             "PART", "PARTSUPP", buffer_size, 4096);
+                             "PART", "PARTSUPP", "partkey", buffer_size, 4096);
     join.execute();
 
     const Statistics& stats = join.getStatistics();

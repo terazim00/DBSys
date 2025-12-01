@@ -1,6 +1,6 @@
 # Block Nested Loops Join Implementation
 
-TPC-H PART와 PARTSUPP 테이블에 대한 Block Nested Loops Join 구현
+TPC-H 테이블에 대한 Block Nested Loops Join 구현
 
 ## 프로젝트 개요
 
@@ -11,10 +11,10 @@ TPC-H PART와 PARTSUPP 테이블에 대한 Block Nested Loops Join 구현
 - ✅ **고정 크기 블록 관리**: 4KB 기본 블록 크기 (조절 가능)
 - ✅ **가변 길이 레코드 지원**: 효율적인 직렬화/역직렬화
 - ✅ **Block Nested Loops Join**: 전통적인 조인 알고리즘 구현
-- ✅ **다중 테이블 조인 (Multi-Table Join)**: 3개 이상의 테이블 조인 지원 (NEW!)
+- ✅ **일반화된 조인**: 어떤 TPC-H 테이블이든 지정된 키로 조인 가능
 - ✅ **버퍼 관리**: 설정 가능한 버퍼 크기로 메모리 효율성 조절
 - ✅ **성능 측정**: 수행 시간, I/O 횟수, 메모리 사용량 측정
-- ✅ **TPC-H 호환**: PART와 PARTSUPP 테이블 스키마 지원
+- ✅ **TPC-H 호환**: PART, PARTSUPP, SUPPLIER 테이블 스키마 지원
 
 ## 시스템 아키텍처
 
@@ -58,15 +58,13 @@ DBSys/
 │   ├── record.h         # 레코드 직렬화/역직렬화
 │   ├── table.h          # 테이블 스키마 및 I/O
 │   ├── buffer.h         # 버퍼 관리
-│   ├── join.h           # Join 알고리즘 (2-table)
-│   └── multi_table_join.h  # Multi-table Join 알고리즘
+│   └── join.h           # Join 알고리즘
 ├── src/                 # 구현 파일
 │   ├── block.cpp
 │   ├── record.cpp
 │   ├── table.cpp
 │   ├── buffer.cpp
 │   ├── join.cpp
-│   ├── multi_table_join.cpp
 │   └── main.cpp
 ├── data/                # 데이터 파일 (.tbl, .dat)
 ├── output/              # 결과 파일
@@ -109,9 +107,18 @@ TPC-H 데이터를 사용하기 전에 CSV(또는 .tbl) 파일을 블록 기반 
   --block-file data/partsupp.dat \
   --table-type PARTSUPP \
   --block-size 4096
+
+# SUPPLIER 테이블 변환
+./dbsys --convert-csv \
+  --csv-file data/supplier.tbl \
+  --block-file data/supplier.dat \
+  --table-type SUPPLIER \
+  --block-size 4096
 ```
 
-### 2. Block Nested Loops Join 실행 (2개 테이블)
+### 2. Block Nested Loops Join 실행
+
+#### PART와 PARTSUPP 조인 (partkey로)
 
 ```bash
 ./dbsys --join \
@@ -119,69 +126,24 @@ TPC-H 데이터를 사용하기 전에 CSV(또는 .tbl) 파일을 블록 기반 
   --inner-table data/partsupp.dat \
   --outer-type PART \
   --inner-type PARTSUPP \
+  --join-key partkey \
   --output output/result.dat \
   --buffer-size 10 \
   --block-size 4096
 ```
 
-### 3. Multi-Table Join 실행 (3개 이상 테이블)
+#### PARTSUPP와 SUPPLIER 조인 (suppkey로)
 
-다중 테이블 조인은 Left-Deep Join Plan을 사용하여 여러 테이블을 순차적으로 조인합니다.
-
-```bash
-# 2개 테이블 조인 (기본 join과 동일한 결과)
-./dbsys --multi-join \
-  --tables data/part.dat,data/partsupp.dat \
-  --table-types PART,PARTSUPP \
-  --join-conditions "0.partkey=1.partkey" \
-  --output output/multi_result.dat \
-  --buffer-size 10
-
-# 3개 테이블 조인
-./dbsys --multi-join \
-  --tables data/part.dat,data/partsupp.dat,data/supplier.dat \
-  --table-types PART,PARTSUPP,SUPPLIER \
-  --join-conditions "0.partkey=1.partkey;1.suppkey=2.suppkey" \
-  --output output/multi_result.dat \
-  --buffer-size 20
-
-# 4개 테이블 조인
-./dbsys --multi-join \
-  --tables data/t1.dat,data/t2.dat,data/t3.dat,data/t4.dat \
-  --table-types TYPE1,TYPE2,TYPE3,TYPE4 \
-  --join-conditions "0.field1=1.field1;1.field2=2.field2;2.field3=3.field3" \
-  --output output/result.dat \
-  --buffer-size 20
-```
-
-**조인 조건 형식:**
-- 테이블은 0부터 시작하는 인덱스로 참조됩니다
-- 형식: `"TABLE_IDX.FIELD=TABLE_IDX.FIELD;..."`
-- 예시: `"0.partkey=1.partkey;1.suppkey=2.suppkey"`
-  - 첫 번째 조인: 테이블 0(PART)과 테이블 1(PARTSUPP)을 partkey로 조인
-  - 두 번째 조인: 결과와 테이블 2(SUPPLIER)를 suppkey로 조인
-
-### 4. Join 실행 및 성능 측정
-
-**기본 Join 실행:**
 ```bash
 ./dbsys --join \
-  --outer-table data/part.dat \
-  --inner-table data/partsupp.dat \
-  --outer-type PART \
-  --inner-type PARTSUPP \
+  --outer-table data/partsupp.dat \
+  --inner-table data/supplier.dat \
+  --outer-type PARTSUPP \
+  --inner-type SUPPLIER \
+  --join-key suppkey \
   --output output/result.dat \
-  --buffer-size 10
-```
-
-**샘플 데이터로 빠른 테스트:**
-```bash
-./dbsys --join \
-  --outer-table data/part_sample.dat \
-  --inner-table data/partsupp_sample.dat \
-  --outer-type PART \
-  --inner-type PARTSUPP \
-  --output output/result.dat
+  --buffer-size 10 \
+  --block-size 4096
 ```
 
 ## 성능 측정 명령어
@@ -199,6 +161,7 @@ for bufsize in 5 10 20 50 100; do
     --inner-table data/partsupp.dat \
     --outer-type PART \
     --inner-type PARTSUPP \
+    --join-key partkey \
     --output output/result_buf${bufsize}.dat \
     --buffer-size ${bufsize}
   echo ""
@@ -233,6 +196,7 @@ for blocksize in 2048 4096 8192 16384; do
     --inner-table data/partsupp_${blocksize}.dat \
     --outer-type PART \
     --inner-type PARTSUPP \
+    --join-key partkey \
     --output output/result_block${blocksize}.dat \
     --buffer-size 10 \
     --block-size ${blocksize}
@@ -249,6 +213,7 @@ done
   --inner-table data/partsupp.dat \
   --outer-type PART \
   --inner-type PARTSUPP \
+  --join-key partkey \
   --output output/result.dat \
   --buffer-size 10 | tee performance_result.txt
 
@@ -260,6 +225,7 @@ for bufsize in 5 10 20 50 100; do
     --inner-table data/partsupp.dat \
     --outer-type PART \
     --inner-type PARTSUPP \
+    --join-key partkey \
     --output output/result_buf${bufsize}.dat \
     --buffer-size ${bufsize} | grep -E "Block Reads|Block Writes|Output Records|Elapsed Time" | \
     awk -v bs=$bufsize 'BEGIN{ORS=","} {print $NF} END{print ""}' >> benchmark.csv
@@ -275,6 +241,7 @@ time ./dbsys --join \
   --inner-table data/partsupp.dat \
   --outer-type PART \
   --inner-type PARTSUPP \
+  --join-key partkey \
   --output output/result.dat \
   --buffer-size 10
 
@@ -286,6 +253,7 @@ for i in {1..5}; do
     --inner-table data/partsupp.dat \
     --outer-type PART \
     --inner-type PARTSUPP \
+    --join-key partkey \
     --output output/result_run${i}.dat \
     --buffer-size 10 2>&1 | grep "Elapsed"
 done
@@ -297,26 +265,16 @@ done
 - `--convert-csv`: CSV 변환 모드 활성화
 - `--csv-file FILE`: 입력 CSV 파일 경로
 - `--block-file FILE`: 출력 블록 파일 경로
-- `--table-type TYPE`: 테이블 타입 (PART 또는 PARTSUPP)
+- `--table-type TYPE`: 테이블 타입 (PART, PARTSUPP, 또는 SUPPLIER)
 - `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
 
-### Join 실행 옵션 (2개 테이블)
+### Join 실행 옵션
 - `--join`: Join 실행 모드 활성화
 - `--outer-table FILE`: Outer 테이블 파일 (블록 형식)
 - `--inner-table FILE`: Inner 테이블 파일 (블록 형식)
-- `--outer-type TYPE`: Outer 테이블 타입
-- `--inner-type TYPE`: Inner 테이블 타입
-- `--output FILE`: 출력 파일 경로
-- `--buffer-size NUM`: 버퍼 블록 개수 (기본값: 10)
-- `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
-
-### Multi-Table Join 옵션 (3개 이상 테이블)
-- `--multi-join`: Multi-table join 모드 활성화
-- `--tables FILES`: 쉼표로 구분된 테이블 파일들 (예: `t1.dat,t2.dat,t3.dat`)
-- `--table-types TYPES`: 쉼표로 구분된 테이블 타입들 (예: `PART,PARTSUPP,SUPPLIER`)
-- `--join-conditions CONDITIONS`: 조인 조건들 (예: `"0.partkey=1.partkey;1.suppkey=2.suppkey"`)
-  - 형식: `"TABLE_IDX.FIELD=TABLE_IDX.FIELD;..."`
-  - 조건 개수는 (테이블 개수 - 1)개여야 함
+- `--outer-type TYPE`: Outer 테이블 타입 (PART, PARTSUPP, 또는 SUPPLIER)
+- `--inner-type TYPE`: Inner 테이블 타입 (PART, PARTSUPP, 또는 SUPPLIER)
+- `--join-key KEY`: 조인 키 필드명 (예: partkey, suppkey)
 - `--output FILE`: 출력 파일 경로
 - `--buffer-size NUM`: 버퍼 블록 개수 (기본값: 10)
 - `--block-size SIZE`: 블록 크기 (바이트, 기본값: 4096)
@@ -356,7 +314,7 @@ for each set of (buffer_size - 1) blocks from outer table:
         load block into buffer
         for each record r in outer blocks:
             for each record s in inner block:
-                if r.partkey == s.partkey:
+                if r.join_key == s.join_key:
                     output <r, s> to result
 ```
 
@@ -415,7 +373,7 @@ make
 ./dbgen -s 1            # 1 = 약 1GB
 
 # 생성된 .tbl 파일을 DBSys data/ 디렉토리로 복사
-cp part.tbl partsupp.tbl ../DBSys/data/
+cp part.tbl partsupp.tbl supplier.tbl ../DBSys/data/
 cd ../DBSys
 ```
 
@@ -432,14 +390,7 @@ cd ../DBSys
 ```bash
 cp /path/to/part.tbl data/
 cp /path/to/partsupp.tbl data/
-```
-
-### 방법 3: 샘플 데이터로 빠른 테스트
-
-포함된 샘플 데이터를 사용하여 바로 테스트 가능:
-```bash
-# data/part_sample.dat, data/partsupp_sample.dat 파일이 이미 포함되어 있습니다
-# 아래 "실행 예제" 섹션 참고
+cp /path/to/supplier.tbl data/
 ```
 
 ## 빠른 시작 가이드
@@ -464,17 +415,24 @@ cp /path/to/partsupp.tbl data/
   --inner-table data/partsupp.dat \
   --outer-type PART \
   --inner-type PARTSUPP \
+  --join-key partkey \
   --output output/result.dat \
   --buffer-size 10
-
-# 5. 샘플 데이터로 빠른 테스트 (데이터 변환 없이 바로 실행)
-./dbsys --join \
-  --outer-table data/part_sample.dat \
-  --inner-table data/partsupp_sample.dat \
-  --outer-type PART \
-  --inner-type PARTSUPP \
-  --output output/result.dat
 ```
+
+## 지원하는 조인
+
+| Outer Table | Inner Table | Join Key | 설명 |
+|------------|-------------|----------|------|
+| PART | PARTSUPP | partkey | 부품과 부품 공급 정보 조인 |
+| PARTSUPP | SUPPLIER | suppkey | 부품 공급과 공급자 정보 조인 |
+| PARTSUPP | PART | partkey | 부품 공급과 부품 정보 조인 |
+| SUPPLIER | PARTSUPP | suppkey | 공급자와 부품 공급 정보 조인 |
+
+**참고**: 지원되는 조인 키는 각 테이블의 스키마에 따라 다릅니다.
+- PART: partkey
+- PARTSUPP: partkey, suppkey
+- SUPPLIER: suppkey
 
 ## 트러블슈팅
 
@@ -496,6 +454,12 @@ mkdir -p output
 ```bash
 # 버퍼 크기를 줄이기
 ./dbsys --join ... --buffer-size 5
+```
+
+### Invalid join key 에러
+```bash
+# 지정한 조인 키가 해당 테이블에 존재하는지 확인
+# 예: PART 테이블에는 partkey만 있고 suppkey는 없음
 ```
 
 ## 라이선스
