@@ -4,7 +4,7 @@
 #include <algorithm>
 
 // ============================================================================
-// 1. 해시 조인 구현
+// Hash Join 구현 (일반화 버전)
 // ============================================================================
 
 HashJoin::HashJoin(
@@ -13,13 +13,38 @@ HashJoin::HashJoin(
     const std::string& out_file,
     const std::string& build_type,
     const std::string& probe_type,
+    const std::string& join_key_name,
     size_t blk_size)
     : build_table_file(build_file),
       probe_table_file(probe_file),
       output_file(out_file),
       build_table_type(build_type),
       probe_table_type(probe_type),
+      join_key(join_key_name),
       block_size(blk_size) {
+}
+
+int_t HashJoin::getJoinKeyValue(const Record& rec, const std::string& table_type) {
+    if (table_type == "PART") {
+        PartRecord part = PartRecord::fromRecord(rec);
+        if (join_key == "partkey") {
+            return part.partkey;
+        }
+    } else if (table_type == "PARTSUPP") {
+        PartSuppRecord partsupp = PartSuppRecord::fromRecord(rec);
+        if (join_key == "partkey") {
+            return partsupp.partkey;
+        } else if (join_key == "suppkey") {
+            return partsupp.suppkey;
+        }
+    } else if (table_type == "SUPPLIER") {
+        SupplierRecord supplier = SupplierRecord::fromRecord(rec);
+        if (join_key == "suppkey") {
+            return supplier.suppkey;
+        }
+    }
+
+    throw std::runtime_error("Invalid join key '" + join_key + "' for table type '" + table_type + "'");
 }
 
 void HashJoin::buildHashTable() {
@@ -37,11 +62,12 @@ void HashJoin::buildHashTable() {
         while (rec_reader.hasNext()) {
             Record record = rec_reader.readNext();
 
-            if (build_table_type == "PART") {
-                PartRecord part = PartRecord::fromRecord(record);
-                hash_table[part.partkey].push_back(part);
-                records_loaded++;
-            }
+            // 조인 키 값 추출
+            int_t key = getJoinKeyValue(record, build_table_type);
+
+            // 해시 테이블에 레코드 추가
+            hash_table[key].push_back(record);
+            records_loaded++;
         }
 
         block.clear();
@@ -66,35 +92,42 @@ void HashJoin::probeAndJoin(TableWriter& writer) {
         RecordReader rec_reader(&input_block);
 
         while (rec_reader.hasNext()) {
-            Record record = rec_reader.readNext();
+            Record probe_record = rec_reader.readNext();
             probed_records++;
 
-            if (probe_table_type == "PARTSUPP") {
-                PartSuppRecord partsupp = PartSuppRecord::fromRecord(record);
+            // Probe 레코드의 조인 키 값 추출
+            int_t probe_key = getJoinKeyValue(probe_record, probe_table_type);
 
-                // 해시 테이블에서 매칭되는 PART 레코드 찾기
-                auto it = hash_table.find(partsupp.partkey);
+            // 해시 테이블에서 매칭되는 레코드 찾기
+            auto it = hash_table.find(probe_key);
 
-                if (it != hash_table.end()) {
-                    // 매칭되는 모든 PART 레코드와 조인
-                    for (const auto& part : it->second) {
-                        JoinResultRecord result;
-                        result.part = part;
-                        result.partsupp = partsupp;
+            if (it != hash_table.end()) {
+                // 매칭되는 모든 Build 레코드와 조인
+                for (const auto& build_record : it->second) {
+                    // 레코드 병합
+                    Record result;
 
-                        Record result_rec = result.toRecord();
-
-                        if (!output_writer.writeRecord(result_rec)) {
-                            writer.writeBlock(&output_block);
-                            output_block.clear();
-
-                            if (!output_writer.writeRecord(result_rec)) {
-                                throw std::runtime_error("Result record too large");
-                            }
-                        }
-
-                        stats.output_records++;
+                    // Build 레코드 필드 추가
+                    for (size_t i = 0; i < build_record.getFieldCount(); ++i) {
+                        result.addField(build_record.getField(i));
                     }
+
+                    // Probe 레코드 필드 추가
+                    for (size_t i = 0; i < probe_record.getFieldCount(); ++i) {
+                        result.addField(probe_record.getField(i));
+                    }
+
+                    // 결과 쓰기
+                    if (!output_writer.writeRecord(result)) {
+                        writer.writeBlock(&output_block);
+                        output_block.clear();
+
+                        if (!output_writer.writeRecord(result)) {
+                            throw std::runtime_error("Result record too large for block");
+                        }
+                    }
+
+                    stats.output_records++;
                 }
             }
         }
@@ -113,6 +146,12 @@ void HashJoin::probeAndJoin(TableWriter& writer) {
 void HashJoin::execute() {
     auto start_time = std::chrono::high_resolution_clock::now();
 
+    std::cout << "\n=== Hash Join Execution ===" << std::endl;
+    std::cout << "Build Table: " << build_table_file << " (" << build_table_type << ")" << std::endl;
+    std::cout << "Probe Table: " << probe_table_file << " (" << probe_table_type << ")" << std::endl;
+    std::cout << "Join Key: " << join_key << std::endl;
+    std::cout << "Output: " << output_file << std::endl;
+
     // Build Phase
     buildHashTable();
 
@@ -124,9 +163,13 @@ void HashJoin::execute() {
     std::chrono::duration<double> elapsed = end_time - start_time;
     stats.elapsed_time = elapsed.count();
 
-    // 메모리 사용량 (해시 테이블 + 블록)
-    stats.memory_usage = hash_table.size() * sizeof(std::pair<int_t, std::vector<PartRecord>>)
-                        + 2 * block_size;
+    // 메모리 사용량 추정 (해시 테이블 + 블록)
+    size_t hash_memory = 0;
+    for (const auto& pair : hash_table) {
+        hash_memory += sizeof(int_t);  // 키
+        hash_memory += pair.second.size() * 100;  // 대략적인 레코드 크기
+    }
+    stats.memory_usage = hash_memory + 2 * block_size;
 
     std::cout << "\n=== Hash Join Statistics ===" << std::endl;
     std::cout << "Block Reads: " << stats.block_reads << std::endl;
@@ -134,76 +177,7 @@ void HashJoin::execute() {
     std::cout << "Output Records: " << stats.output_records << std::endl;
     std::cout << "Elapsed Time: " << stats.elapsed_time << " seconds" << std::endl;
     std::cout << "Memory Usage: " << (stats.memory_usage / 1024.0 / 1024.0) << " MB" << std::endl;
-}
-
-// ============================================================================
-// 2. 멀티스레드 BNLJ 구현 (간단한 버전)
-// ============================================================================
-
-MultithreadedJoin::MultithreadedJoin(
-    const std::string& outer_file,
-    const std::string& inner_file,
-    const std::string& out_file,
-    const std::string& outer_type,
-    const std::string& inner_type,
-    size_t buf_size,
-    size_t blk_size,
-    size_t threads)
-    : outer_table_file(outer_file),
-      inner_table_file(inner_file),
-      output_file(out_file),
-      outer_table_type(outer_type),
-      inner_table_type(inner_type),
-      buffer_size(buf_size),
-      block_size(blk_size),
-      num_threads(threads),
-      done_reading(false) {
-}
-
-void MultithreadedJoin::execute() {
-    std::cout << "Multithreaded join not fully implemented yet." << std::endl;
-    std::cout << "This requires more complex synchronization." << std::endl;
-
-    // 현재는 단일 스레드 BNLJ로 fallback
-    BlockNestedLoopsJoin join(outer_table_file, inner_table_file, output_file,
-                             outer_table_type, inner_table_type,
-                             buffer_size, block_size);
-    join.execute();
-    stats = join.getStatistics();
-}
-
-// ============================================================================
-// 3. 프리페칭 BNLJ 구현 (간단한 버전)
-// ============================================================================
-
-PrefetchingJoin::PrefetchingJoin(
-    const std::string& outer_file,
-    const std::string& inner_file,
-    const std::string& out_file,
-    const std::string& outer_type,
-    const std::string& inner_type,
-    size_t buf_size,
-    size_t blk_size)
-    : outer_table_file(outer_file),
-      inner_table_file(inner_file),
-      output_file(out_file),
-      outer_table_type(outer_type),
-      inner_table_type(inner_type),
-      buffer_size(buf_size),
-      block_size(blk_size),
-      prefetch_ready(false) {
-}
-
-void PrefetchingJoin::execute() {
-    std::cout << "Prefetching join not fully implemented yet." << std::endl;
-    std::cout << "This requires asynchronous I/O support." << std::endl;
-
-    // 현재는 단일 스레드 BNLJ로 fallback
-    BlockNestedLoopsJoin join(outer_table_file, inner_table_file, output_file,
-                             outer_table_type, inner_table_type,
-                             buffer_size, block_size);
-    join.execute();
-    stats = join.getStatistics();
+    std::cout << "Hash Table Size: " << hash_table.size() << " keys" << std::endl;
 }
 
 // ============================================================================
@@ -230,12 +204,15 @@ PerformanceResult PerformanceTester::testBlockNestedLoops(
     const std::string& outer_file,
     const std::string& inner_file,
     const std::string& output_file,
+    const std::string& outer_type,
+    const std::string& inner_type,
+    const std::string& join_key,
     size_t buffer_size) {
 
     std::cout << "\n=== Testing Block Nested Loops Join ===" << std::endl;
 
     BlockNestedLoopsJoin join(outer_file, inner_file, output_file,
-                             "PART", "PARTSUPP", buffer_size, 4096);
+                             outer_type, inner_type, join_key, buffer_size, 4096);
     join.execute();
 
     const Statistics& stats = join.getStatistics();
@@ -254,12 +231,15 @@ PerformanceResult PerformanceTester::testBlockNestedLoops(
 PerformanceResult PerformanceTester::testHashJoin(
     const std::string& build_file,
     const std::string& probe_file,
-    const std::string& output_file) {
+    const std::string& output_file,
+    const std::string& build_type,
+    const std::string& probe_type,
+    const std::string& join_key) {
 
     std::cout << "\n=== Testing Hash Join ===" << std::endl;
 
     HashJoin join(build_file, probe_file, output_file,
-                 "PART", "PARTSUPP", 4096);
+                 build_type, probe_type, join_key, 4096);
     join.execute();
 
     const Statistics& stats = join.getStatistics();
@@ -275,65 +255,46 @@ PerformanceResult PerformanceTester::testHashJoin(
     return result;
 }
 
-PerformanceResult PerformanceTester::testMultithreaded(
-    const std::string& outer_file,
-    const std::string& inner_file,
-    const std::string& output_file,
-    size_t buffer_size,
-    size_t num_threads) {
-
-    std::cout << "\n=== Testing Multithreaded Join ===" << std::endl;
-
-    MultithreadedJoin join(outer_file, inner_file, output_file,
-                          "PART", "PARTSUPP",
-                          buffer_size, 4096, num_threads);
-    join.execute();
-
-    const Statistics& stats = join.getStatistics();
-
-    PerformanceResult result;
-    result.algorithm_name = "Multithreaded (threads=" + std::to_string(num_threads) + ")";
-    result.elapsed_time = stats.elapsed_time;
-    result.block_reads = stats.block_reads;
-    result.block_writes = stats.block_writes;
-    result.output_records = stats.output_records;
-    result.memory_usage = stats.memory_usage;
-
-    return result;
-}
-
 void PerformanceTester::compareAll(
     const std::string& outer_file,
     const std::string& inner_file,
-    const std::string& output_dir) {
+    const std::string& output_dir,
+    const std::string& outer_type,
+    const std::string& inner_type,
+    const std::string& join_key) {
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Performance Comparison" << std::endl;
     std::cout << "========================================" << std::endl;
+    std::cout << "Tables: " << outer_type << " ⋈ " << inner_type << std::endl;
+    std::cout << "Join Key: " << join_key << std::endl;
 
     std::vector<PerformanceResult> results;
 
     // 1. Block Nested Loops (다양한 버퍼 크기)
-    for (size_t buf_size : {5, 10, 20}) {
+    for (size_t buf_size : {5, 10, 20, 50}) {
         try {
             auto result = testBlockNestedLoops(
                 outer_file, inner_file,
                 output_dir + "/bnlj_buf" + std::to_string(buf_size) + ".dat",
+                outer_type, inner_type, join_key,
                 buf_size);
             results.push_back(result);
         } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
+            std::cerr << "Error in BNLJ (buf=" << buf_size << "): " << e.what() << std::endl;
         }
     }
 
     // 2. Hash Join
     try {
+        // 작은 테이블을 Build로 선택
         auto result = testHashJoin(
             outer_file, inner_file,
-            output_dir + "/hash_join.dat");
+            output_dir + "/hash_join.dat",
+            outer_type, inner_type, join_key);
         results.push_back(result);
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "Error in Hash Join: " << e.what() << std::endl;
     }
 
     // 결과 출력
